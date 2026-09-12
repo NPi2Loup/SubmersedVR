@@ -56,16 +56,15 @@ namespace SubmersedVR
         {
             OpenKeyboardWithText(inputField.text, prompt, (text) =>
             {
-                // Make it uppercase if needed and close the inputgroup
-                if (inputField is uGUI_InputField field)
+                // Make it uppercase if needed
+                var field = inputField as uGUI_InputField;
+                if (field?.uppercase == true)
                 {
-                    if (field.uppercase)
-                    {
-                        text = text.ToUpper();
-                    }
-                    field.EndEdit();
+                    text = text.ToUpper();
                 }
+                // Assign the text before closing the inputgroup, so the committed value is the new one
                 inputField.text = text;
+                field?.EndEdit();
                 inputField.OnDeselect(null);
             });
         }

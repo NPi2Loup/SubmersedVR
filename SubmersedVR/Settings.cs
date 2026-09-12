@@ -43,6 +43,7 @@ namespace SubmersedVR
         public static bool ArticulatedHands = false;
         public static bool HandBasedTurning = false;
         public static bool LeftHandBasedTurning = false;
+        public static float HandMovementPitchOffset = 45.0f;
 
         //Ambient Occlusion Settings
         public static bool AOEnabled = true;
@@ -107,6 +108,7 @@ namespace SubmersedVR
                 HandBasedTurning = value == "Right Hand Based" || value == "Left Hand Based";
                 LeftHandBasedTurning = value == "Left Hand Based";
             });
+            panel.AddSliderOption(tab, "Hand Movement Pitch Offset", HandMovementPitchOffset, 0f, 90f, HandMovementPitchOffset, 1f, (value) => { HandMovementPitchOffset = value; }, SliderLabelMode.Float, "0", "Pitch of the movement reference relative to the controller (hand based movement modes only). 45 = legacy behavior, 0 = move where the controller points.");
             panel.AddToggleOption(tab, "Enable Snap Turning", IsSnapTurningEnabled, (value) =>
             {
                 IsSnapTurningEnabled = value;

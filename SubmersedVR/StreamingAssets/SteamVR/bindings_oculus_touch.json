@@ -150,15 +150,27 @@
                "mode" : "button",
                "path" : "/user/hand/right/input/b"
             },
-            {
-               "inputs" : {
-                  "click" : {
-                     "output" : "/actions/subnautica/in/uicancel"
-                  }
-               },
-               "mode" : "button",
-               "path" : "/user/hand/right/input/b"
-            },
+             {
+                "inputs" : {
+                   "click" : {
+                      "output" : "/actions/subnautica/in/uicancel"
+                   }
+                },
+                "mode" : "button",
+                "path" : "/user/hand/right/input/b"
+             },
+             {
+                "inputs" : {
+                   "long_press" : {
+                      "output" : "/actions/subnautica/in/cyclenext"
+                   },
+                   "long_press_inhibit" : {
+                      "output" : "/actions/subnautica/in/cyclenext"
+                   }
+                },
+                "mode" : "button",
+                "path" : "/user/hand/right/input/b"
+             },
             {
                "inputs" : {
                   "click" : {

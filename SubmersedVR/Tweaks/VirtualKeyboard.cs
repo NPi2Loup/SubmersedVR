@@ -18,6 +18,9 @@ namespace SubmersedVR
         private Action<string> callback;
         private static VirtualKeyboard instance;
 
+        // Guards against ActivateInputField focus churn reopening (and reseeding) the keyboard mid-session.
+        public static bool KeyboardOpen { get; private set; }
+
         void Start()
         {
             SteamVR_Events.System(EVREventType.VREvent_KeyboardClosed).RemoveListener(OnKeyboardClosed);
@@ -27,6 +30,8 @@ namespace SubmersedVR
 
         private void OnKeyboardClosed(VREvent_t evt)
         {
+            // Reset here (not only in Deactivate): the beacon flow never triggers DeactivateInputField.
+            KeyboardOpen = false;
             var textBuilder = new StringBuilder(256);
             int caretPosition = (int)SteamVR.instance.overlay.GetKeyboardText(textBuilder, 256);
             string text = textBuilder.ToString();
@@ -40,6 +45,7 @@ namespace SubmersedVR
         public static void OpenKeyboardWithText(string text, string prompt = "Input Text", Action<string> callback = null)
         {
             VirtualKeyboard.instance.callback = callback;
+            KeyboardOpen = true;
             SteamVR.instance.overlay.ShowKeyboard(0, 0, 0, prompt, 256, text, 1);
         }
 
@@ -50,6 +56,7 @@ namespace SubmersedVR
                 return;
             }
             VirtualKeyboard.instance.callback = null;
+            KeyboardOpen = false;
         }
 
         public static void OpenKeyboardOnTextField(TMP_InputField inputField, string prompt = "Input Text", Action<string> callback = null)
@@ -90,6 +97,11 @@ namespace SubmersedVR
     {
         public static void Postfix(TMP_InputField __instance)
         {
+            // Focus churn while a session is open must not reopen (and reseed) the keyboard.
+            if (VirtualKeyboard.KeyboardOpen)
+            {
+                return;
+            }
             VirtualKeyboard.OpenKeyboardOnTextField(__instance);
         }
     }

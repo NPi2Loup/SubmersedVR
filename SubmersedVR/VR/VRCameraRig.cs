@@ -34,6 +34,8 @@ namespace SubmersedVR
         // The only thing I need is cameras at different positions for the UI or Worldspace Raycasts
         public LaserPointer laserPointer;
         public LaserPointer laserPointerLeft;
+        public GameObject movementLaser;
+        public GameObject movementLaserLeft;
 
         public GameObject uiRig;
         public GameObject leftControllerUI;
@@ -138,6 +140,14 @@ namespace SubmersedVR
             laserPointerLeft.gameObject.SetActive(false);
             // laserPointer.gameObject.SetActive(false);
             laserPointer.disableAfterCreation = true;
+
+            // Movement laser setup (visual for the hand-based movement axis, see MovementLaser)
+            var rightLaser = new GameObject(nameof(movementLaser)).WithParent(rightController.transform).AddComponent<MovementLaser>();
+            rightLaser.isLeftHand = false;
+            movementLaser = rightLaser.gameObject;
+            var leftLaser = new GameObject(nameof(movementLaserLeft)).WithParent(leftController.transform).AddComponent<MovementLaser>();
+            leftLaser.isLeftHand = true;
+            movementLaserLeft = leftLaser.gameObject;
 
             // NOTE: These laserpointer and controllers is NOT parented to the Rig, since they act in UI space, not world space
             uiRig = new GameObject(nameof(uiRig));

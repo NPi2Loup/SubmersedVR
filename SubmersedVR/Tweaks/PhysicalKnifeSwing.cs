@@ -33,6 +33,9 @@ namespace SubmersedVR
         // Time of the last fired swing, read by KnifeHitboxDebug to flash the hitbox
         internal static float LastSwingTime = -1f;
 
+        // Direction of the last fired swing, read by KnifeHitboxDebug for the "Swing Direction" axis
+        internal static Vector3 LastSwingDirection = Vector3.forward;
+
         void Awake()
         {
             instance = this;
@@ -60,7 +63,8 @@ namespace SubmersedVR
             var heldTool = Inventory.main?.GetHeldTool();
             if (!(heldTool is Knife knife)) return;
 
-            float speed = rightControllerPose.GetVelocity().magnitude;
+            Vector3 velocity = rightControllerPose.GetVelocity();
+            float speed = velocity.magnitude;
             bool isAboveThreshold = speed >= Settings.KnifeSwingSpeedThreshold;
 
             // Trigger on the rising edge: speed crosses above threshold
@@ -68,17 +72,23 @@ namespace SubmersedVR
             {
                 if (Time.time - lastSwingTime >= SwingCooldown)
                 {
-                    TriggerSwing(knife, speed);
+                    TriggerSwing(knife, speed, velocity);
                 }
             }
 
             wasAboveThreshold = isAboveThreshold;
         }
 
-        private void TriggerSwing(Knife knife, float speed)
+        private void TriggerSwing(Knife knife, float speed, Vector3 velocity)
         {
             lastSwingTime = Time.time;
             LastSwingTime = Time.time;
+
+            // Record the swing direction for the hitbox debug visual
+            if (velocity.sqrMagnitude > 0.0001f)
+            {
+                LastSwingDirection = velocity.normalized;
+            }
 
             // Get the GUIHand to pass to OnToolUseAnim
             var guiHand = Player.main?.GetComponent<GUIHand>();

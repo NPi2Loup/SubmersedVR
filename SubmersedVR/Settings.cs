@@ -152,7 +152,7 @@ namespace SubmersedVR
 
             panel.AddHeading(tab, "Debug Options");
             panel.AddToggleOption(tab, "Debug Overlays", IsDebugEnabled, (value) => { IsDebugEnabled = value; IsDebugChanged(value); }, "Enables Debug Overlays and Logs.");
-            panel.AddChoiceOption<string>(tab, "Knife Hitbox Axis", new string[] { "Vision", "Laser Pointer", "Head to Hand", "Vision + Laser" }, KnifeHitboxAxis, (value) => { KnifeHitboxAxis = value; }, "Axis of the knife hitbox debug visual. Vision = line of sight, Laser Pointer = aim direction of the hand, Head to Hand = direction from the head to the hand.");
+            panel.AddChoiceOption<string>(tab, "Knife Hitbox Axis", new string[] { "Vision", "Laser Pointer", "Head to Hand", "Swing Direction", "Vision + Laser" }, KnifeHitboxAxis, (value) => { KnifeHitboxAxis = value; }, "Axis of the knife hitbox debug visual. Vision = line of sight, Laser Pointer = aim direction of the hand, Head to Hand = direction from the head to the hand, Swing Direction = box along the last swing movement.");
             panel.AddToggleOption(tab, "Always show controllers", AlwaysShowControllers, (value) => { AlwaysShowControllers = value; AlwaysShowControllersChanged(value); }, "Shows the controllers at all times.");
             //panel.AddToggleOption(tab, "Always show laserpointer", AlwaysShowLaserPointer, (value) => { AlwaysShowLaserPointer = value; AlwaysShowLaserPointerChanged(value); }, "Show the laserpointer at all times.");
 

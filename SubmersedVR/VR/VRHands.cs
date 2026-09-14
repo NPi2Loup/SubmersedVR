@@ -168,6 +168,7 @@ namespace SubmersedVR
         {
             instance = this;
             this.ik = ik;
+            Settings.PDAHandAngleChanged += OnPDAHandAngleChanged;
 
             leftHand = ik.solver.leftHandEffector.bone;
             rightHand = ik.solver.rightHandEffector.bone;
@@ -209,7 +210,20 @@ namespace SubmersedVR
         }
         public void OnOpenPDA()
         {
-            HandOffsets.PDA.Apply(leftTarget);
+            var pdaOffset = HandOffsets.PDA;
+            leftTarget.localPosition = pdaOffset.Pos;
+            // User calibrated twist of the PDA in the hand, composed after the base
+            // pose so that each axis stays independent of the others
+            leftTarget.localRotation = Quaternion.Euler(pdaOffset.Angles) * Quaternion.Euler(Settings.PDAHandAngleX, Settings.PDAHandAngleY, Settings.PDAHandAngleZ);
+        }
+
+        void OnPDAHandAngleChanged(float value)
+        {
+            var pda = Player.main?.GetPDA();
+            if (pda != null && pda.isInUse)
+            {
+                OnOpenPDA();
+            }
         }
         public void OnClosePDA()
         {
@@ -312,6 +326,11 @@ namespace SubmersedVR
 
         }
 
+
+        void OnDestroy()
+        {
+            Settings.PDAHandAngleChanged -= OnPDAHandAngleChanged;
+        }
 
         void Update()
         {

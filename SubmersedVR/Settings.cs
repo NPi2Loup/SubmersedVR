@@ -47,6 +47,13 @@ namespace SubmersedVR
         // Session-only visual aid (internal = not picked up by the reflection serializer)
         internal static bool ShowMovementLaser = false;
 
+        public static bool ShoulderPDA = true;
+        public static string PDAReachZone = "Shoulder";
+        public static float PDAHandAngleX = 0f;
+        public static float PDAHandAngleY = 0f;
+        public static float PDAHandAngleZ = 0f;
+        public static event FloatChanged PDAHandAngleChanged;
+
         //Ambient Occlusion Settings
         public static bool AOEnabled = true;
         public static string AOMethod = "Post Effect";
@@ -130,6 +137,11 @@ namespace SubmersedVR
             });
 
             panel.AddHeading(tab, "Immersion");
+            panel.AddToggleOption(tab, "Shoulder PDA", ShoulderPDA, (value) => { ShoulderPDA = value; }, "Reach your left hand to the PDA zone and press left grip to open/close the PDA. The regular PDA button keeps working.");
+            panel.AddChoiceOption<string>(tab, "PDA Reach Zone", new string[] { "Shoulder", "Lower Back" }, PDAReachZone, (value) => { PDAReachZone = value; });
+            panel.AddSliderOption(tab, "PDA Hand Angle X(°)", PDAHandAngleX, -30f, 30f, PDAHandAngleX, 1f, (value) => { PDAHandAngleX = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", "Rotates the PDA in the left hand around the X axis. Calibrate with the PDA open.");
+            panel.AddSliderOption(tab, "PDA Hand Angle Y(°)", PDAHandAngleY, -30f, 30f, PDAHandAngleY, 1f, (value) => { PDAHandAngleY = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", null);
+            panel.AddSliderOption(tab, "PDA Hand Angle Z(°)", PDAHandAngleZ, -30f, 30f, PDAHandAngleZ, 1f, (value) => { PDAHandAngleZ = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", null);
             panel.AddToggleOption(tab, "Put survival meter on left wrist", PutBarsOnWrist, (value) => { PutBarsOnWrist = value; PutBarsOnWristChanged(value); });
             panel.AddToggleOption(tab, "Articulated Hands", ArticulatedHands, (value) => { ArticulatedHands = value; }, "Hands animate based on the movement of your physical hands.");
             panel.AddToggleOption(tab, "Enable Game Haptics(WIP)", AreGameHapticsEnabled, (value) => { AreGameHapticsEnabled = value; }, "Enable controller vibration while interacting with world objects.");

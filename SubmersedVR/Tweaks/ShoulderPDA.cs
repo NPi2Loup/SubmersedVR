@@ -50,8 +50,8 @@ namespace SubmersedVR
             float zoneRadius;
             if (Settings.PDAReachZone == "Lower Back")
             {
-                zoneCenter = head.position + head.right * -0.25f + Vector3.down * 0.4f + head.forward * -0.15f;
-                zoneRadius = 0.35f;
+                zoneCenter = head.position + head.right * -0.25f + Vector3.down * 0.6f + head.forward * -0.15f;
+                zoneRadius = 0.25f;
             }
             else
             {
@@ -67,7 +67,11 @@ namespace SubmersedVR
                 HapticsVR.PlayGameHaptics(HapticsVR.Controller.Left, 0.0f, 0.08f, 10f, 0.3f);
             }
             wasInZone = IsHandInPDAZone;
-            if (!IsHandInPDAZone || !Player.main.IsFreeToInteract()) return;
+            if (!IsHandInPDAZone) return;
+            // The gesture must also work while the PDA is open (to close it again),
+            // but IsFreeToInteract is false in that state
+            bool pdaOpen = Player.main.GetPDA()?.isInUse == true;
+            if (!pdaOpen && !Player.main.IsFreeToInteract()) return;
 
             // Left trigger (LeftHand action), not the grip, since the grip is bound to MoveDown/Sprint
             bool triggerDown = SteamVR_Actions.subnautica.LeftHand.GetStateDown(SteamVR_Input_Sources.LeftHand);

@@ -524,6 +524,76 @@ namespace SubmersedVR
         }
     }
 
+    // Tracks whether the in-game menu is open. The menu panel's active state is not
+    // a reliable signal (it stays active while the menu is closed), so the state is
+    // tracked explicitly from the menu's own Open/Close calls.
+    internal static class IngameMenuState
+    {
+        internal static bool IsOpen = false;
+    }
+
+    [HarmonyPatch(typeof(IngameMenu), nameof(IngameMenu.Open))]
+    static class IngameMenuOpenState
+    {
+        static void Postfix()
+        {
+            IngameMenuState.IsOpen = true;
+        }
+    }
+
+    [HarmonyPatch(typeof(IngameMenu), nameof(IngameMenu.Close))]
+    static class IngameMenuCloseState
+    {
+        static void Postfix()
+        {
+            IngameMenuState.IsOpen = false;
+        }
+    }
+
+    [HarmonyPatch(typeof(IngameMenu), nameof(IngameMenu.ClosePanel))]
+    static class IngameMenuClosePanelState
+    {
+        static void Postfix()
+        {
+            IngameMenuState.IsOpen = false;
+        }
+    }
+
+    // Safety: reset the state if the menu object is destroyed (scene unload)
+    [HarmonyPatch(typeof(IngameMenu), nameof(IngameMenu.OnDestroy))]
+    static class IngameMenuDestroyState
+    {
+        static void Postfix()
+        {
+            IngameMenuState.IsOpen = false;
+        }
+    }
+
+    // Keep the PDA open while the in-game menu is showing, so the PDA hand angle
+    // sliders can be calibrated with the PDA visible in the hand
+    [HarmonyPatch(typeof(PDA), nameof(PDA.Close))]
+    public static class KeepPDAOpenWhileMenuOpen
+    {
+        public static bool Prefix()
+        {
+            return !IngameMenuState.IsOpen;
+        }
+    }
+
+    // Open the PDA when the in-game menu opens, so it is visible while calibrating
+    [HarmonyPatch(typeof(IngameMenu), nameof(IngameMenu.Open))]
+    public static class OpenPDAWithIngameMenu
+    {
+        public static void Postfix()
+        {
+            var pda = Player.main?.GetPDA();
+            if (pda != null && !pda.isInUse)
+            {
+                pda.Open();
+            }
+        }
+    }
+
     // Aiming related fixes are following now
     // TODO: Consider moving them into their own category/class or namespace
     public static class Aiming

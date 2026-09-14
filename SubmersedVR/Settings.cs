@@ -54,6 +54,10 @@ namespace SubmersedVR
         public static float PDAHandAngleZ = 0f;
         public static event FloatChanged PDAHandAngleChanged;
 
+        public static bool PhysicalKnifeSwing = true;
+        public static float KnifeSwingSpeedThreshold = 2.3f;
+        public static string KnifeHitboxAxis = "Vision + Laser";
+
         //Ambient Occlusion Settings
         public static bool AOEnabled = true;
         public static string AOMethod = "Post Effect";
@@ -144,6 +148,8 @@ namespace SubmersedVR
             panel.AddSliderOption(tab, "PDA Hand Angle Z(°)", PDAHandAngleZ, -30f, 30f, PDAHandAngleZ, 1f, (value) => { PDAHandAngleZ = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", null);
             panel.AddToggleOption(tab, "Put survival meter on left wrist", PutBarsOnWrist, (value) => { PutBarsOnWrist = value; PutBarsOnWristChanged(value); });
             panel.AddToggleOption(tab, "Articulated Hands", ArticulatedHands, (value) => { ArticulatedHands = value; }, "Hands animate based on the movement of your physical hands.");
+            panel.AddToggleOption(tab, "Physical Knife Swing", PhysicalKnifeSwing, (value) => { PhysicalKnifeSwing = value; }, "Swing your right controller to attack with the knife instead of pressing the trigger.");
+            panel.AddSliderOption(tab, "Knife Swing Speed Threshold", KnifeSwingSpeedThreshold, 0.5f, 4.0f, KnifeSwingSpeedThreshold, 0.1f, (value) => { KnifeSwingSpeedThreshold = value; }, SliderLabelMode.Float, "0.0", "Minimum controller speed (m/s) to trigger a swing.");
             panel.AddToggleOption(tab, "Enable Game Haptics(WIP)", AreGameHapticsEnabled, (value) => { AreGameHapticsEnabled = value; }, "Enable controller vibration while interacting with world objects.");
             panel.AddToggleOption(tab, "Enable UI Haptics(WIP)", AreUIHapticsEnabled, (value) => { AreUIHapticsEnabled = value; }, "Enable controller vibration while interacting with the User Interface.");
             panel.AddChoiceOption<string>(tab, "Show Laser Pointer", new string[] { "Always", "Default", "Never" }, ShowLaserPointer, (value) =>
@@ -163,6 +169,7 @@ namespace SubmersedVR
 
             panel.AddHeading(tab, "Debug Options");
             panel.AddToggleOption(tab, "Debug Overlays", IsDebugEnabled, (value) => { IsDebugEnabled = value; IsDebugChanged(value); }, "Enables Debug Overlays and Logs.");
+            panel.AddChoiceOption<string>(tab, "Knife Hitbox Axis", new string[] { "Vision", "Laser Pointer", "Head to Hand", "Swing Direction", "Vision + Laser" }, KnifeHitboxAxis, (value) => { KnifeHitboxAxis = value; }, "Axis of the knife hitbox debug visual. Vision = line of sight, Laser Pointer = aim direction of the hand, Head to Hand = direction from the head to the hand, Swing Direction = box along the last swing movement.");
             panel.AddToggleOption(tab, "Always show controllers", AlwaysShowControllers, (value) => { AlwaysShowControllers = value; AlwaysShowControllersChanged(value); }, "Shows the controllers at all times.");
             //panel.AddToggleOption(tab, "Always show laserpointer", AlwaysShowLaserPointer, (value) => { AlwaysShowLaserPointer = value; AlwaysShowLaserPointerChanged(value); }, "Show the laserpointer at all times.");
 

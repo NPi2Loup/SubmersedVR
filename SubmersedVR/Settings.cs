@@ -44,6 +44,9 @@ namespace SubmersedVR
         public static bool HandBasedTurning = false;
         public static bool LeftHandBasedTurning = false;
 
+        public static bool PhysicalKnifeSwing = true;
+        public static float KnifeSwingSpeedThreshold = 2.3f;
+
         //Ambient Occlusion Settings
         public static bool AOEnabled = true;
         public static string AOMethod = "Post Effect";
@@ -127,6 +130,8 @@ namespace SubmersedVR
             panel.AddHeading(tab, "Immersion");
             panel.AddToggleOption(tab, "Put survival meter on left wrist", PutBarsOnWrist, (value) => { PutBarsOnWrist = value; PutBarsOnWristChanged(value); });
             panel.AddToggleOption(tab, "Articulated Hands", ArticulatedHands, (value) => { ArticulatedHands = value; }, "Hands animate based on the movement of your physical hands.");
+            panel.AddToggleOption(tab, "Physical Knife Swing", PhysicalKnifeSwing, (value) => { PhysicalKnifeSwing = value; }, "Swing your right controller to attack with the knife instead of pressing the trigger.");
+            panel.AddSliderOption(tab, "Knife Swing Speed Threshold", KnifeSwingSpeedThreshold, 0.5f, 4.0f, KnifeSwingSpeedThreshold, 0.1f, (value) => { KnifeSwingSpeedThreshold = value; }, SliderLabelMode.Float, "0.0", "Minimum controller speed (m/s) to trigger a swing.");
             panel.AddToggleOption(tab, "Enable Game Haptics(WIP)", AreGameHapticsEnabled, (value) => { AreGameHapticsEnabled = value; }, "Enable controller vibration while interacting with world objects.");
             panel.AddToggleOption(tab, "Enable UI Haptics(WIP)", AreUIHapticsEnabled, (value) => { AreUIHapticsEnabled = value; }, "Enable controller vibration while interacting with the User Interface.");
             panel.AddChoiceOption<string>(tab, "Show Laser Pointer", new string[] { "Always", "Default", "Never" }, ShowLaserPointer, (value) =>

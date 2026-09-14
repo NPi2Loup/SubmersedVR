@@ -30,6 +30,9 @@ namespace SubmersedVR
         // Set true only during our own call to OnToolUseAnim so the prefix patch lets it through
         public bool IsSwinging { get; private set; }
 
+        // Time of the last fired swing, read by KnifeHitboxDebug to flash the hitbox
+        internal static float LastSwingTime = -1f;
+
         void Awake()
         {
             instance = this;
@@ -75,6 +78,7 @@ namespace SubmersedVR
         private void TriggerSwing(Knife knife, float speed)
         {
             lastSwingTime = Time.time;
+            LastSwingTime = Time.time;
 
             // Get the GUIHand to pass to OnToolUseAnim
             var guiHand = Player.main?.GetComponent<GUIHand>();

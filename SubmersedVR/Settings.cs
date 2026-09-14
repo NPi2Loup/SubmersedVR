@@ -44,6 +44,9 @@ namespace SubmersedVR
         public static bool HandBasedTurning = false;
         public static bool LeftHandBasedTurning = false;
 
+        public static bool ShoulderPDA = true;
+        public static string PDAReachZone = "Shoulder";
+
         //Ambient Occlusion Settings
         public static bool AOEnabled = true;
         public static string AOMethod = "Post Effect";
@@ -125,6 +128,8 @@ namespace SubmersedVR
             });
 
             panel.AddHeading(tab, "Immersion");
+            panel.AddToggleOption(tab, "Shoulder PDA", ShoulderPDA, (value) => { ShoulderPDA = value; }, "Reach your left hand to the PDA zone and press the left trigger to open/close the PDA. The regular PDA button keeps working.");
+            panel.AddChoiceOption<string>(tab, "PDA Reach Zone", new string[] { "Shoulder", "Lower Back" }, PDAReachZone, (value) => { PDAReachZone = value; });
             panel.AddToggleOption(tab, "Put survival meter on left wrist", PutBarsOnWrist, (value) => { PutBarsOnWrist = value; PutBarsOnWristChanged(value); });
             panel.AddToggleOption(tab, "Articulated Hands", ArticulatedHands, (value) => { ArticulatedHands = value; }, "Hands animate based on the movement of your physical hands.");
             panel.AddToggleOption(tab, "Enable Game Haptics(WIP)", AreGameHapticsEnabled, (value) => { AreGameHapticsEnabled = value; }, "Enable controller vibration while interacting with world objects.");

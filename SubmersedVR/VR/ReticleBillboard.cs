@@ -6,13 +6,16 @@ namespace SubmersedVR
     // VRHud.SetupHandReticleOnHand); this only re-aims its plane to the view
     // every frame, so the text stays upright and readable no matter how the
     // tool model is held (e.g. the knife is stored about 90 degrees turned in
-    // the hand, which rolls the reticle in hand mode). The per-frame write also
-    // wins against the game's own HandReticle.LateUpdate, which otherwise
-    // re-positions and re-rotates the reticle to its non-VR anchor.
+    // the hand, which rolls the reticle in hand mode). The per-frame write wins
+    // against the game's own HandReticle.LateUpdate, which otherwise
+    // re-positions and re-rotates the reticle to its non-VR anchor;
+    // DefaultExecutionOrder(1) guarantees we run after it.
+    [DefaultExecutionOrder(1)]
     public class ReticleBillboard : MonoBehaviour
     {
-        // Hand-mode anchor offset (see SetupHandReticleOnHand)
-        private static readonly Vector3 AnchorOffset = new Vector3(0f, 0f, 0.05f);
+        // Hand-mode anchor, shared with the reticle setups in VRHud
+        internal static readonly Vector3 AnchorOffset = new Vector3(0f, 0f, 0.05f);
+        internal static readonly Vector3 AnchorScale = new Vector3(0.001f, 0.001f, 0.001f);
 
         void LateUpdate()
         {

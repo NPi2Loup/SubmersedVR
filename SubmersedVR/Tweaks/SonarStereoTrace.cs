@@ -5,11 +5,13 @@ using UnityEngine;
 namespace SubmersedVR
 {
     // Diagnostic (temporary): find the Seamoth sonar ping visual. The v2 trace
-    // showed the ping does not go through VFXScan/VFXScanning/SonarScreenFX, so
-    // v3 dumps the candidate objects (name match) at ping time - name, active,
-    // position, parent chain, shader - and samples their positions alongside the
-    // VR camera position while the ping is active, to find what follows the head
-    // (and is therefore rendered differently in each eye in stereo).
+    // showed the ping does not go through VFXScan/VFXScanning/SonarScreenFX and
+    // the eye matrices are static (not head-tracked). v4 dumps every active
+    // object near the ping origin (position based, no name filter - the v3 name
+    // filter hit its cap on false positives) and samples their positions
+    // relative to the VR camera while the ping is active: a constant offset
+    // from the camera means the object is camera-anchored (the stereo bug), a
+    // growing offset means a world-anchored expanding wave.
     // UnityEngine engine methods (Shader.SetGlobal*, Material.Set*) are native
     // with no managed body and cannot be patched with Harmony, so this trace
     // only patches game assembly methods.
@@ -17,10 +19,11 @@ namespace SubmersedVR
     {
         private const float WindowDuration = 3f;
 
-        // Candidate sampling cadence (frames) and limits
+        // Candidate dump radius around the ping origin and sampling limits
+        private const float DumpRadius = 30f;
         private const int SampleEveryFrames = 30;
-        private const int MaxSampledCandidates = 10;
-        private const int MaxDumpedCandidates = 40;
+        private const int MaxSampledCandidates = 15;
+        private const int MaxDumpedCandidates = 80;
 
         static float windowEnd = -1f;
         static bool windowActive;
@@ -46,7 +49,9 @@ namespace SubmersedVR
                 LogMatrix("matrixLeftEye", root.matrixLeftEye);
                 LogMatrix("matrixRightEye", root.matrixRightEye);
             }
-            DumpCandidates();
+            Vector3 origin = root != null && root.mainCam != null ? root.mainCam.transform.position : Vector3.zero;
+            Mod.logger.LogInfo($"[SonarTrace] ping origin={origin}");
+            DumpCandidates(origin);
         }
 
         // One line per row: the logger swallows newlines in multi-line strings
@@ -58,9 +63,10 @@ namespace SubmersedVR
             Mod.logger.LogInfo($"[SonarTrace] {name} row3: {m.m30} {m.m31} {m.m32} {m.m33}");
         }
 
-        // List the candidate objects at ping time: name, active state, world
-        // position, parent chain (up to 5 levels) and shader if it has one
-        static void DumpCandidates()
+        // List every active object near the ping origin: name, active state,
+        // world position, parent chain (up to 5 levels) and shader if it has
+        // one. The wave visual must be near the Seamoth at ping time.
+        static void DumpCandidates(Vector3 origin)
         {
             candidates.Clear();
             // Active objects only (the stub assembly lacks the includeInactive
@@ -70,7 +76,7 @@ namespace SubmersedVR
             foreach (var go in all)
             {
                 if (dumped >= MaxDumpedCandidates) break;
-                if (!IsCandidateName(go.name)) continue;
+                if (Vector3.Distance(go.transform.position, origin) >= DumpRadius) continue;
                 candidates.Add(go);
                 string shader = "-";
                 var renderer = go.GetComponent<Renderer>();
@@ -96,16 +102,6 @@ namespace SubmersedVR
             return string.Join(" > ", parts);
         }
 
-        static bool IsCandidateName(string name)
-        {
-            return name.IndexOf("sonar", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || name.IndexOf("ping", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || name.IndexOf("wave", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || name.IndexOf("scan", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || name.IndexOf("ripple", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || name.IndexOf("ring", System.StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
         public static void Log(string msg)
         {
             if (WindowOpen)
@@ -114,9 +110,9 @@ namespace SubmersedVR
             }
         }
 
-        // Sample the candidate positions alongside the VR camera position during
-        // the window: if a candidate keeps a constant offset from the camera while
-        // the head moves, it is camera-anchored (the stereo bug)
+        // Sample the candidate positions during the window. The offset relative
+        // to the VR camera is the discriminator: constant while the head moves
+        // = camera-anchored (the stereo bug), growing = world-anchored wave.
         public static void Sample()
         {
             if (!WindowOpen) return;
@@ -124,13 +120,15 @@ namespace SubmersedVR
             sampleFrame = Time.frameCount;
 
             var rig = VRCameraRig.instance;
-            string camPos = rig != null && rig.vrCamera != null ? rig.vrCamera.transform.position.ToString() : "-";
+            if (rig == null || rig.vrCamera == null) return;
+            Vector3 camPos = rig.vrCamera.transform.position;
             int sampled = 0;
             foreach (var go in candidates)
             {
                 if (sampled >= MaxSampledCandidates) break;
                 if (go == null || !go.activeInHierarchy) continue;
-                Mod.logger.LogInfo($"[SonarTrace] sample: {go.name} pos={go.transform.position} camPos={camPos}");
+                if (go.GetComponent<Renderer>() == null) continue;
+                Mod.logger.LogInfo($"[SonarTrace] sample: {go.name} pos={go.transform.position} deltaFromCam={go.transform.position - camPos} camPos={camPos}");
                 sampled++;
             }
         }
@@ -184,18 +182,28 @@ namespace SubmersedVR
         }
     }
 
-    // Attach the eye logger to the actual VR camera (the one that renders the
-    // stereo eyes) and the candidate sampler to the rig
+    // The VR camera is stolen after SetupControllers (and can be re-stolen on
+    // level loads), so attach the eye logger there
+    [HarmonyPatch(typeof(VRCameraRig), nameof(VRCameraRig.StealCamera))]
+    static class SonarTraceStealCamera
+    {
+        [HarmonyPostfix]
+        static void Postfix(VRCameraRig __instance, Camera camera)
+        {
+            if (camera != null)
+            {
+                camera.gameObject.GetOrAddComponent<SonarTraceEyeLogger>();
+            }
+        }
+    }
+
+    // Attach the candidate sampler to the rig
     [HarmonyPatch(typeof(VRCameraRig), nameof(VRCameraRig.SetupControllers))]
     static class SonarTraceAttachVR
     {
         [HarmonyPostfix]
         static void Postfix(VRCameraRig __instance)
         {
-            if (__instance.vrCamera != null)
-            {
-                __instance.vrCamera.gameObject.GetOrAddComponent<SonarTraceEyeLogger>();
-            }
             __instance.gameObject.GetOrAddComponent<SonarTraceSampler>();
         }
     }

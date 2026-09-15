@@ -14,8 +14,6 @@ namespace SubmersedVR
     /// game's PDA button so the regular PDA input path keeps working; the close
     /// gesture calls PDA.Close directly since the game's PDA button path does not
     /// reach it while the PDA is open.
-    /// While the left hand is in the zone, MoveDown and Sprint inputs are suppressed
-    /// so gripping doesn't make you swim down.
     /// </summary>
     public class ShoulderPDA : MonoBehaviour
     {
@@ -24,9 +22,6 @@ namespace SubmersedVR
 
         private float lastToggleTime = -1f;
         private bool wasInZone = false;
-
-        // Updated every frame, read by the input patches in SteamVrGameInput
-        internal static bool IsHandInPDAZone = false;
 
         private static bool pendingPDAButtonPress;
 
@@ -39,7 +34,6 @@ namespace SubmersedVR
 
         void Update()
         {
-            IsHandInPDAZone = false;
             if (!Settings.ShoulderPDA) return;
 
             var rig = VRCameraRig.instance;
@@ -61,24 +55,26 @@ namespace SubmersedVR
                 zoneRadius = 0.2f;
             }
 
-            IsHandInPDAZone = Vector3.Distance(rig.leftController.transform.position, zoneCenter) <= zoneRadius;
+            bool inZone = Vector3.Distance(rig.leftController.transform.position, zoneCenter) <= zoneRadius;
 
             // Subtle haptic when the hand enters the zone
-            if (IsHandInPDAZone && !wasInZone)
+            if (inZone && !wasInZone)
             {
                 HapticsVR.PlayGameHaptics(HapticsVR.Controller.Left, 0.0f, 0.08f, 10f, 0.3f);
             }
-            wasInZone = IsHandInPDAZone;
-            if (!IsHandInPDAZone) return;
+            wasInZone = inZone;
+            if (!inZone) return;
             // The gesture must also work while the PDA is open (to close it again),
             // but IsFreeToInteract is false in that state
             var pda = Player.main.GetPDA();
-            bool pdaOpen = pda != null && pda.isInUse;
+            bool pdaOpen = pda != null && (pda.state == PDA.State.Opened || pda.state == PDA.State.Opening);
             if (!pdaOpen && !Player.main.IsFreeToInteract()) return;
 
-            // Left trigger (LeftHand action), not the grip, since the grip is bound to MoveDown/Sprint
+            // Left trigger (LeftHand action)
             bool triggerDown = SteamVR_Actions.subnautica.LeftHand.GetStateDown(SteamVR_Input_Sources.LeftHand);
             if (!triggerDown) return;
+
+            Mod.logger.LogInfo($"[ShoulderPDA] trigger in zone: state={pda?.state} isInUse={pda?.isInUse} isOpen={pda?.isOpen} freeToInteract={Player.main.IsFreeToInteract()}");
 
             if (Time.time - lastToggleTime < ToggleCooldown) return;
             lastToggleTime = Time.time;
@@ -87,19 +83,16 @@ namespace SubmersedVR
             {
                 // The game's PDA button path does not reach the close while the PDA is open,
                 // so close it directly (the fork's proven approach)
+                Mod.logger.LogInfo("[ShoulderPDA] closing PDA");
                 pda.Close();
             }
             else
             {
                 // Emulate a press of the game's PDA button, consumed by the GetButtonDown prefix
+                Mod.logger.LogInfo("[ShoulderPDA] opening PDA (virtual press)");
                 pendingPDAButtonPress = true;
             }
             HapticsVR.PlayGameHaptics(HapticsVR.Controller.Left, 0.0f, 0.15f, 15f, 0.6f);
-        }
-
-        void OnDestroy()
-        {
-            IsHandInPDAZone = false;
         }
     }
 

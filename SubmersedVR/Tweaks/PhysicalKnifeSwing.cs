@@ -36,12 +36,8 @@ namespace SubmersedVR
         // Must match PlayerTool.TraceForTarget's default sphere radius
         private const float TraceSphereRadius = 0.2f;
 
-        // The probe hit lists are reused across frames
-        private static readonly Collider[] sphereHits = new Collider[16];
+        // The probe hit list is reused across frames
         private static readonly RaycastHit[] capsuleHits = new RaycastHit[16];
-
-        // Limits how far the predictive probe looks ahead along the hand velocity
-        private const float MaxPredictedDelta = 0.4f;
 
         private float lastSwingTime = -1f;
         private float armTime = -1f;
@@ -119,7 +115,7 @@ namespace SubmersedVR
                     var rig = VRCameraRig.instance;
                     bool movingTowardAim = rig == null || rig.laserPointer == null
                         || Vector3.Dot(velocity, rig.laserPointer.transform.forward) > -0.2f;
-                    if (movingTowardAim && ProbeHittableTarget(knife, velocity))
+                    if (movingTowardAim && ProbeHittableTarget(knife))
                     {
                         FireSwing(knife, speed);
                     }
@@ -143,34 +139,19 @@ namespace SubmersedVR
         }
 
         // Probe: is there a valid knife target inside the current probe hitbox?
-        // Capsule shape mirrors the game's own trace (0.2 m sphere radius swept for
-        // the attack distance along the aim), so a trigger means the games trace
-        // will hit. Sphere shape is a more lenient test around the hand. The probe
-        // origin is the predicted hand position at trace time (the trace runs a
-        // little after the swing anim starts), so the answer to "will the games
-        // trace hit if I fire now" is as accurate as the delay estimate.
-        static bool ProbeHittableTarget(Knife knife, Vector3 velocity)
+        // The capsule mirrors the game's own trace (0.2 m sphere radius swept for
+        // the attack distance along the aim, inflated by the probe radius scale to
+        // cover the gap between the controller position and the real trace origin),
+        // so a trigger means the games trace will hit.
+        static bool ProbeHittableTarget(Knife knife)
         {
             var rig = VRCameraRig.instance;
             if (rig == null || rig.rightController == null || rig.laserPointer == null) return false;
 
-            Vector3 origin = rig.rightController.transform.position
-                + Vector3.ClampMagnitude(velocity * Settings.KnifeAttackDelay, MaxPredictedDelta);
+            Vector3 origin = rig.rightController.transform.position;
             float scale = Settings.KnifeProbeRadiusScale;
             float length = Mathf.Max(knife.attackDist, TraceSphereRadius * 2f);
 
-            if (Settings.KnifeProbeShape == "Sphere")
-            {
-                int sphereCount = Physics.OverlapSphereNonAlloc(origin, length * scale, sphereHits, ~0);
-                for (int i = 0; i < sphereCount; i++)
-                {
-                    if (IsHittable(sphereHits[i])) return true;
-                }
-                return false;
-            }
-
-            // Capsule mirrors the game's own trace: 0.2 m sphere radius swept for
-            // the attack distance along the aim
             int count = Physics.SphereCastNonAlloc(origin, TraceSphereRadius * scale, rig.laserPointer.transform.forward, capsuleHits, length, ~0);
             for (int i = 0; i < count; i++)
             {
@@ -265,21 +246,6 @@ namespace SubmersedVR
 
             __result = false;
             return false;
-        }
-    }
-
-    // Log the delay between our swing fire and the games actual damage trace,
-    // so the Knife Attack Delay setting can be calibrated from the game log
-    [HarmonyPatch(typeof(PlayerTool), nameof(PlayerTool.TraceForTarget), new[] { typeof(float), typeof(float), typeof(bool) })]
-    static class LogKnifeTraceDelay
-    {
-        [HarmonyPostfix]
-        static void Postfix(float distance, float sphereRadius, bool preferSphereHits, GameObject __result)
-        {
-            if (!(Inventory.main?.GetHeldTool() is Knife)) return;
-            if (Time.time - PhysicalKnifeSwing.LastSwingTime > 1.5f) return;
-            string hitName = __result != null ? __result.name : "none";
-            Mod.logger.LogInfo($"[KnifeTrace] dt={Time.time - PhysicalKnifeSwing.LastSwingTime:F3}s dist={distance:F2} hit={hitName}");
         }
     }
 

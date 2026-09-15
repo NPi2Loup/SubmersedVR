@@ -60,10 +60,8 @@ namespace SubmersedVR
 
         public static bool PhysicalKnifeSwing = true;
         public static float KnifeSwingSpeedThreshold = 2.3f;
-        public static string KnifeProbeShape = "Capsule";
-        public static float KnifeProbeRadiusScale = 1.0f;
-        public static float KnifeSwingWindow = 0.5f;
-        public static float KnifeAttackDelay = 0.1f;
+        public static float KnifeProbeRadiusScale = 1.5f;
+        public static float KnifeSwingWindow = 0.2f;
 
         //Ambient Occlusion Settings
         public static bool AOEnabled = true;
@@ -180,10 +178,8 @@ namespace SubmersedVR
 
             panel.AddHeading(tab, "Debug Options");
             panel.AddToggleOption(tab, "Debug Overlays", IsDebugEnabled, (value) => { IsDebugEnabled = value; IsDebugChanged(value); }, "Enables Debug Overlays and Logs.");
-            panel.AddChoiceOption<string>(tab, "Swing Probe Shape", new string[] { "Capsule", "Sphere" }, KnifeProbeShape, (value) => { KnifeProbeShape = value; }, "Shape of the swing detection zone. Capsule matches the games real hitbox, Sphere is a more lenient zone around the hand.");
             panel.AddSliderOption(tab, "Swing Probe Radius", KnifeProbeRadiusScale, 0.5f, 1.5f, KnifeProbeRadiusScale, 0.1f, (value) => { KnifeProbeRadiusScale = value; }, SliderLabelMode.Float, "0.0", "Inflates the swing detection radius (1.0 = the games 0.2 m trace radius).");
             panel.AddSliderOption(tab, "Swing Detection Window(s)", KnifeSwingWindow, 0.2f, 1.0f, KnifeSwingWindow, 0.1f, (value) => { KnifeSwingWindow = value; }, SliderLabelMode.Float, "0.0", "How long a swing stays armed waiting for a target before firing a whiff.");
-            panel.AddSliderOption(tab, "Knife Attack Delay(s)", KnifeAttackDelay, 0f, 0.3f, KnifeAttackDelay, 0.01f, (value) => { KnifeAttackDelay = value; }, SliderLabelMode.Float, "0.0", "Delay between the swing anim start and the games damage trace. The probe tests the predicted hand position at trace time. Calibrate from the [KnifeTrace] log lines.");
             panel.AddToggleOption(tab, "Always show controllers", AlwaysShowControllers, (value) => { AlwaysShowControllers = value; AlwaysShowControllersChanged(value); }, "Shows the controllers at all times.");
             //panel.AddToggleOption(tab, "Always show laserpointer", AlwaysShowLaserPointer, (value) => { AlwaysShowLaserPointer = value; AlwaysShowLaserPointerChanged(value); }, "Show the laserpointer at all times.");
 

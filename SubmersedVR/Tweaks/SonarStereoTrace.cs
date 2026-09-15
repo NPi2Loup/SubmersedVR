@@ -1,3 +1,7 @@
+// Temporary diagnostic: compiled out of release/PR builds unless SONAR_TRACE
+// is defined in the csproj
+#if SONAR_TRACE
+
 using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
@@ -5,14 +9,13 @@ using UnityEngine;
 namespace SubmersedVR
 {
     // Diagnostic (temporary): find the Seamoth sonar ping visual. The v2 trace
-    // showed the ping does not go through VFXScan/VFXScanning/SonarScreenFX and
-    // the eye matrices are static (identity, half-IPD offset). v5 dumps the
-    // whole vehicle hierarchy (SNCameraRoot lives on the vehicle, the sonar is
-    // a vehicle component) and the main camera hierarchy (camera-anchored
-    // candidates) at ping time, then re-scans nearby renderers every 30 frames
-    // to catch an object spawned after the ping. The v4 global radius dump
-    // filled its cap with fish and never found the wave or even the vehicle
-    // parts.
+    // showed the eye matrices are static (identity, half-IPD offset) and the
+    // v4 global radius dump filled its cap with fish. v6 dumps the whole
+    // vehicle hierarchy and the main camera hierarchy (plus the camera's
+    // parent chain and the mounted vehicle) at ping time, re-scans nearby
+    // renderers (6 m) every 30 frames to catch an object spawned after the
+    // ping, and logs the VFXScan/VFXScanning/SonarScreenFX markers
+    // unconditionally so a call outside the ping window is not missed.
     // UnityEngine engine methods (Shader.SetGlobal*, Material.Set*) are native
     // with no managed body and cannot be patched with Harmony, so this trace
     // only patches game assembly methods.
@@ -22,7 +25,7 @@ namespace SubmersedVR
 
         // Re-scan cadence (frames), radius and limits
         private const int RescanEveryFrames = 30;
-        private const float RescanRadius = 12f;
+        private const float RescanRadius = 6f;
         private const int MaxNewPerRescan = 10;
         private const int MaxDumpedPerHierarchy = 400;
         private const int MaxSampledCandidates = 15;
@@ -30,6 +33,7 @@ namespace SubmersedVR
         static float windowEnd = -1f;
         static bool windowActive;
         static Vector3 origin;
+        static bool originValid;
         static List<GameObject> candidates = new List<GameObject>();
         static HashSet<string> seen = new HashSet<string>();
         static int rescanFrame = -1;
@@ -51,6 +55,16 @@ namespace SubmersedVR
             Mod.logger.LogInfo($"[SonarTrace] ping ({source}) - log window open for {WindowDuration}s");
 
             var root = SNCameraRoot.main;
+            var vehicle = Player.main?.currentMountedVehicle;
+            if (vehicle != null)
+            {
+                Mod.logger.LogInfo($"[SonarTrace] currentMountedVehicle={vehicle.name} pos={vehicle.transform.position}");
+            }
+            else
+            {
+                Mod.logger.LogInfo("[SonarTrace] currentMountedVehicle=<none>");
+            }
+            originValid = false;
             if (root != null)
             {
                 Mod.logger.LogInfo($"[SonarTrace] stereoSeparation={root.stereoSeparation}");
@@ -59,13 +73,32 @@ namespace SubmersedVR
                 if (root.mainCam != null)
                 {
                     origin = root.mainCam.transform.position;
+                    originValid = true;
+                    LogParentChain("mainCam", root.mainCam.transform);
                 }
+            }
+            if (!originValid)
+            {
+                Mod.logger.LogError("[SonarTrace] no valid origin (mainCam was null) - the re-scan is disabled for this window");
             }
             Mod.logger.LogInfo($"[SonarTrace] ping origin={origin}");
             // The wave is either on the vehicle (sonar is a vehicle component)
             // or anchored to the camera
             DumpHierarchy("vehicle", root != null ? root.gameObject : null);
             DumpHierarchy("camera", root != null && root.mainCam != null ? root.mainCam.gameObject : null);
+        }
+
+        // Walk up the scene hierarchy: tells whether the main camera (and thus a
+        // camera-anchored wave) hangs under the vehicle or at the scene root
+        static void LogParentChain(string label, Transform t)
+        {
+            int depth = 0;
+            while (t != null && depth < 10)
+            {
+                Mod.logger.LogInfo($"[SonarTrace] {label} chain[{depth}] {t.name}");
+                t = t.parent;
+                depth++;
+            }
         }
 
         // One line per row: the logger swallows newlines in multi-line strings
@@ -125,7 +158,7 @@ namespace SubmersedVR
         // name) only.
         public static void Rescan()
         {
-            if (!WindowOpen) return;
+            if (!WindowOpen || !originValid) return;
             if (rescanFrame >= 0 && Time.frameCount - rescanFrame < RescanEveryFrames) return;
             rescanFrame = Time.frameCount;
 
@@ -135,10 +168,12 @@ namespace SubmersedVR
             var renderers = Object.FindObjectsOfType<Renderer>();
             foreach (var renderer in renderers)
             {
-                if (newLogged >= MaxNewPerRescan) break;
                 var t = renderer.transform;
                 if (Vector3.Distance(t.position, origin) >= RescanRadius) continue;
                 if (!seen.Add(t.name)) continue;
+                // Wave-like names are logged even past the per-rescan cap, so a
+                // busy frame cannot mask the ping visual
+                if (!IsWaveCandidateName(t.name) && newLogged >= MaxNewPerRescan) continue;
                 if (renderer.sharedMaterial != null)
                 {
                     candidates.Add(t.gameObject);
@@ -151,6 +186,14 @@ namespace SubmersedVR
             {
                 Mod.logger.LogInfo($"[SonarTrace] rescan done ({newLogged} new objects)");
             }
+        }
+
+        // The ping visual is likely named after its effect; such names are
+        // always worth logging
+        static bool IsWaveCandidateName(string name)
+        {
+            name = name.ToLowerInvariant();
+            return name.Contains("scan") || name.Contains("sonar") || name.Contains("wave") || name.Contains("ping");
         }
 
         // Sample the dumped candidate positions during the window. The offset
@@ -275,18 +318,20 @@ namespace SubmersedVR
         }
     }
 
-    // World scan sweep VFX
+    // World scan sweep VFX. Logged unconditionally (not only during an open
+    // window) so a call outside the ping window is still visible in the log.
     [HarmonyPatch(typeof(VFXScan), nameof(VFXScan.StartScan))]
     static class SonarTraceVFXScan
     {
         [HarmonyPostfix]
         static void Postfix(VFXScan __instance)
         {
-            SonarStereoTrace.Log($"VFXScan.StartScan: active={__instance.scanActive} duration={__instance.scanDuration} renderers={__instance.renderers?.Length}");
+            Mod.logger.LogInfo($"[SonarTrace] VFXScan.StartScan: active={__instance.scanActive} duration={__instance.scanDuration} renderers={__instance.renderers?.Length} window={SonarStereoTrace.WindowOpen}");
         }
     }
 
-    // Per-camera CommandBuffer scan VFX (one buffer per eye in stereo)
+    // Per-camera CommandBuffer scan VFX (one buffer per eye in stereo). Logged
+    // unconditionally, like the other VFX markers.
     [HarmonyPatch(typeof(VFXScanning), nameof(VFXScanning.StartScan))]
     static class SonarTraceVFXScanning
     {
@@ -303,20 +348,23 @@ namespace SubmersedVR
                 }
                 cameras = string.Join(",", names);
             }
-            SonarStereoTrace.Log($"VFXScanning.StartScan: material={mat?.name} renderers={__instance.renderersToScan?.Count} cameras=[{cameras}]");
+            Mod.logger.LogInfo($"[SonarTrace] VFXScanning.StartScan: material={mat?.name} renderers={__instance.renderersToScan?.Count} cameras=[{cameras}] window={SonarStereoTrace.WindowOpen}");
         }
     }
 
-    // Screen-space sonar ping FX
+    // Screen-space sonar ping FX. Logged unconditionally (not only during an
+    // open window) so a call outside the ping window is still visible in the log.
     [HarmonyPatch(typeof(SonarScreenFX), nameof(SonarScreenFX.Ping))]
     static class SonarTraceScreenFX
     {
         [HarmonyPostfix]
         static void Postfix(SonarScreenFX __instance)
         {
-            SonarStereoTrace.Log($"SonarScreenFX.Ping: pingDistance={__instance.pingDistance} waveDuration={__instance.waveDuration} shaderID={__instance.pingDistanceShaderID} material={__instance._material?.name}");
+            Mod.logger.LogInfo($"[SonarTrace] SonarScreenFX.Ping: pingDistance={__instance.pingDistance} waveDuration={__instance.waveDuration} shaderID={__instance.pingDistanceShaderID} material={__instance._material?.name} window={SonarStereoTrace.WindowOpen}");
         }
     }
 
     #endregion
 }
+
+#endif

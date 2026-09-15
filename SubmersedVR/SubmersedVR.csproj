@@ -8,7 +8,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <!-- NOTE: Preprocessor directive SV = SubmersedVR, BZ = Below Zero -->
-    <DefineConstants>SV</DefineConstants>
+    <DefineConstants>SV;SONAR_TRACE</DefineConstants>
     <!-- NOTE: Change this to your own directoy when building -->
     <SubnauticaDir>/home/oka/.local/share/Steam/steamapps/common/Subnautica/</SubnauticaDir>
     <NoWarn>$(NoWarn);CS0436</NoWarn>

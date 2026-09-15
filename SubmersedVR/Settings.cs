@@ -144,7 +144,7 @@ namespace SubmersedVR
 
             panel.AddHeading(tab, "Immersion");
             panel.AddToggleOption(tab, "Shoulder PDA", ShoulderPDA, (value) => { ShoulderPDA = value; }, "Reach your left hand to the PDA zone and press left grip to open/close the PDA. The regular PDA button keeps working.");
-            panel.AddChoiceOption<string>(tab, "PDA Reach Zone", new string[] { "Shoulder", "Lower Back" }, PDAReachZone, (value) => { PDAReachZone = value; });
+            panel.AddChoiceOption<string>(tab, "PDA Reach Zone", new string[] { "Shoulder", "Hip" }, PDAReachZone, (value) => { PDAReachZone = value; });
             panel.AddSliderOption(tab, "PDA Hand Angle X(°)", PDAHandAngleX, -30f, 30f, PDAHandAngleX, 1f, (value) => { PDAHandAngleX = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", "Rotates the PDA in the left hand around the X axis. Calibrate with the PDA open.");
             panel.AddSliderOption(tab, "PDA Hand Angle Y(°)", PDAHandAngleY, -30f, 30f, PDAHandAngleY, 1f, (value) => { PDAHandAngleY = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", null);
             panel.AddSliderOption(tab, "PDA Hand Angle Z(°)", PDAHandAngleZ, -30f, 30f, PDAHandAngleZ, 1f, (value) => { PDAHandAngleZ = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", null);

@@ -87,7 +87,8 @@ namespace SubmersedVR
             handReticle.layer = LayerID.UI;
             Vector3 camScale = rig.uiCamera.transform.lossyScale;
             handReticle.transform.localScale = new Vector3(worldScale.x / camScale.x, worldScale.y / camScale.y, worldScale.z / camScale.z);
-            handReticle.transform.localRotation = Quaternion.identity;
+            // Fixed face toward the player: the canvas front is -Z under the camera
+            handReticle.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
         }
 
         public static void OnHandReticleSettingChanged(bool onLaserPointer)

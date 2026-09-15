@@ -24,11 +24,12 @@ namespace SubmersedVR
         {
             Idle,
             Armed,
-            Cooldown
+            Fired
         }
 
-        // Minimum time between swings to prevent spam
-        private const float SwingCooldown = 0.4f;
+        // Safety timeout in the Fired state, in case the hand keeps moving
+        // above the threshold (no discrete gesture end)
+        private const float FiredSafetyTimeout = 1.0f;
 
         // Scale haptic intensity by swing speed (clamped)
         private const float MaxHapticSpeed = 5.0f;
@@ -39,7 +40,7 @@ namespace SubmersedVR
         // The probe hit list is reused across frames
         private static readonly RaycastHit[] capsuleHits = new RaycastHit[16];
 
-        private float lastSwingTime = -1f;
+        private float firedTime = -1f;
         private float armTime = -1f;
         private SteamVR_Behaviour_Pose rightControllerPose;
         private bool wasAboveThreshold = false;
@@ -118,17 +119,24 @@ namespace SubmersedVR
                     if (movingTowardAim && ProbeHittableTarget(knife))
                     {
                         FireSwing(knife, speed);
+                        state = SwingState.Fired;
+                        firedTime = Time.time;
                     }
-                    // The gesture ends without a target: speed drops back below the
-                    // threshold, or the detection window expires -> fire a whiff
+                    // The gesture ends without a target: speed drops back below
+                    // the threshold, or the detection window expires -> whiff
                     else if (!isAboveThreshold || Time.time - armTime >= Settings.KnifeSwingWindow)
                     {
                         FireSwing(knife, speed);
+                        // Speed already dropped: the gesture is over, rearm right away
+                        state = !isAboveThreshold ? SwingState.Idle : SwingState.Fired;
+                        firedTime = Time.time;
                     }
                     break;
 
-                case SwingState.Cooldown:
-                    if (Time.time - lastSwingTime >= SwingCooldown)
+                case SwingState.Fired:
+                    // Rearm when the hand slows down (end of the gesture), so a
+                    // back-and-forth swing can hit on every forward pass
+                    if (!isAboveThreshold || Time.time - firedTime >= FiredSafetyTimeout)
                     {
                         state = SwingState.Idle;
                     }
@@ -179,9 +187,7 @@ namespace SubmersedVR
 
         private void FireSwing(Knife knife, float speed)
         {
-            lastSwingTime = Time.time;
             LastSwingTime = Time.time;
-            state = SwingState.Cooldown;
 
             // Get the GUIHand to pass to OnToolUseAnim
             var guiHand = Player.main?.GetComponent<GUIHand>();

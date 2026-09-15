@@ -8,14 +8,17 @@ using UnityEngine;
 
 namespace SubmersedVR
 {
-    // Diagnostic (temporary): find the Seamoth sonar ping visual. The v2 trace
-    // showed the eye matrices are static (identity, half-IPD offset) and the
-    // v4 global radius dump filled its cap with fish. v6 dumps the whole
-    // vehicle hierarchy and the main camera hierarchy (plus the camera's
-    // parent chain and the mounted vehicle) at ping time, re-scans nearby
-    // renderers (6 m) every 30 frames to catch an object spawned after the
-    // ping, and logs the VFXScan/VFXScanning/SonarScreenFX markers
-    // unconditionally so a call outside the ping window is not missed.
+    // Diagnostic (temporary): find the sonar ping wave. The in-game symptom
+    // is a grid texture on object outlines whose anchoring follows the camera
+    // position, misaligned between the two stereo eyes. v7 logs the
+    // SonarScreenFX component context (gameobject, parent chain) and dumps
+    // the values of its material properties at ping time and every 30 frames
+    // during the window, to identify which property drives the grid and
+    // whether it correlates with the camera position. The re-scan (6 m,
+    // wave-like names forced) logs new renderers with their parent chain, and
+    // the VFX markers are logged unconditionally so a call outside the ping
+    // window is not missed. The v2 trace showed the eye matrices are static
+    // (identity, half-IPD offset) and MainCamera renders "Both".
     // UnityEngine engine methods (Shader.SetGlobal*, Material.Set*) are native
     // with no managed body and cannot be patched with Harmony, so this trace
     // only patches game assembly methods.
@@ -27,13 +30,13 @@ namespace SubmersedVR
         private const int RescanEveryFrames = 30;
         private const float RescanRadius = 6f;
         private const int MaxNewPerRescan = 10;
-        private const int MaxDumpedPerHierarchy = 400;
         private const int MaxSampledCandidates = 15;
 
         static float windowEnd = -1f;
         static bool windowActive;
         static Vector3 origin;
         static bool originValid;
+        public static Material fxMaterial;
         static List<GameObject> candidates = new List<GameObject>();
         static HashSet<string> seen = new HashSet<string>();
         static int rescanFrame = -1;
@@ -51,6 +54,7 @@ namespace SubmersedVR
             seen.Clear();
             rescanFrame = -1;
             sampleFrame = -1;
+            fxMaterial = null;
             SonarTraceEyeLogger.ResetSeen();
             Mod.logger.LogInfo($"[SonarTrace] ping ({source}) - log window open for {WindowDuration}s");
 
@@ -82,15 +86,27 @@ namespace SubmersedVR
                 Mod.logger.LogError("[SonarTrace] no valid origin (mainCam was null) - the re-scan is disabled for this window");
             }
             Mod.logger.LogInfo($"[SonarTrace] ping origin={origin}");
-            // The wave is either on the vehicle (sonar is a vehicle component)
-            // or anchored to the camera
-            DumpHierarchy("vehicle", root != null ? root.gameObject : null);
-            DumpHierarchy("camera", root != null && root.mainCam != null ? root.mainCam.gameObject : null);
+            // Register the main camera hierarchy names so the re-scan does not
+            // log the camera objects as "new" (the v6 "vehicle" dump was the
+            // PlayerCameras object, not the vehicle)
+            if (root != null && root.mainCam != null)
+            {
+                AddNamesToSeen(root.mainCam.transform);
+            }
         }
 
-        // Walk up the scene hierarchy: tells whether the main camera (and thus a
-        // camera-anchored wave) hangs under the vehicle or at the scene root
-        static void LogParentChain(string label, Transform t)
+        static void AddNamesToSeen(Transform t)
+        {
+            seen.Add(t.name);
+            for (int i = 0; i < t.childCount; i++)
+            {
+                AddNamesToSeen(t.GetChild(i));
+            }
+        }
+
+        // Walk up the scene hierarchy: tells whether an object hangs under the
+        // vehicle, under the (stolen) camera or at the scene root
+        public static void LogParentChain(string label, Transform t)
         {
             int depth = 0;
             while (t != null && depth < 10)
@@ -108,41 +124,6 @@ namespace SubmersedVR
             Mod.logger.LogInfo($"[SonarTrace] {name} row1: {m.m10} {m.m11} {m.m12} {m.m13}");
             Mod.logger.LogInfo($"[SonarTrace] {name} row2: {m.m20} {m.m21} {m.m22} {m.m23}");
             Mod.logger.LogInfo($"[SonarTrace] {name} row3: {m.m30} {m.m31} {m.m32} {m.m33}");
-        }
-
-        // Log every object of the given hierarchy: name, active state, world
-        // position, depth and shader if it has a renderer
-        static void DumpHierarchy(string label, GameObject go)
-        {
-            if (go == null)
-            {
-                Mod.logger.LogInfo($"[SonarTrace] {label} hierarchy: <null>");
-                return;
-            }
-            int dumped = 0;
-            DumpHierarchyRecursive(label, go.transform, 0, ref dumped);
-            Mod.logger.LogInfo($"[SonarTrace] {label} hierarchy dump done ({dumped} objects)");
-        }
-
-        static void DumpHierarchyRecursive(string label, Transform t, int depth, ref int dumped)
-        {
-            if (dumped >= MaxDumpedPerHierarchy) return;
-            string shader = "-";
-            var renderer = t.GetComponent<Renderer>();
-            if (renderer != null && renderer.sharedMaterial != null)
-            {
-                shader = renderer.sharedMaterial.shader.name;
-                candidates.Add(t.gameObject);
-            }
-            // Also register the name so the re-scan only logs objects that
-            // appeared after the ping
-            seen.Add(t.name);
-            Mod.logger.LogInfo($"[SonarTrace] {label} depth={depth} {t.name} active={t.gameObject.activeInHierarchy} pos={t.position} shader={shader}");
-            dumped++;
-            for (int i = 0; i < t.childCount; i++)
-            {
-                DumpHierarchyRecursive(label, t.GetChild(i), depth + 1, ref dumped);
-            }
         }
 
         public static void Log(string msg)
@@ -179,7 +160,9 @@ namespace SubmersedVR
                     candidates.Add(t.gameObject);
                 }
                 string shader = renderer.sharedMaterial != null ? renderer.sharedMaterial.shader.name : "-";
-                Mod.logger.LogInfo($"[SonarTrace] new: {t.name} active={t.gameObject.activeInHierarchy} pos={t.position} deltaFromCam={t.position - camPos} camPos={camPos} shader={shader}");
+                string parent = t.parent != null ? t.parent.name : "<none>";
+                string grand = t.parent != null && t.parent.parent != null ? t.parent.parent.name : "<none>";
+                Mod.logger.LogInfo($"[SonarTrace] new: {t.name} active={t.gameObject.activeInHierarchy} pos={t.position} deltaFromCam={t.position - camPos} camPos={camPos} shader={shader} parent={parent} gp={grand}");
                 newLogged++;
             }
             if (newLogged > 0)
@@ -196,15 +179,41 @@ namespace SubmersedVR
             return name.Contains("scan") || name.Contains("sonar") || name.Contains("wave") || name.Contains("ping");
         }
 
-        // Sample the dumped candidate positions during the window. The offset
-        // relative to the VR camera is the discriminator: constant while the
-        // head moves = camera-anchored (the stereo bug), growing =
-        // world-anchored wave.
+        // Log the current values of the material's numeric properties: which
+        // ones animate over the wave and how they correlate with the camera
+        public static void LogMaterialProperties(Material m)
+        {
+            if (m == null) return;
+            var shader = m.shader;
+            if (shader == null) return;
+            int count = shader.GetPropertyCount();
+            for (int i = 0; i < count; i++)
+            {
+                string name = shader.GetPropertyName(i);
+                string value;
+                var type = shader.GetPropertyType(i);
+                if (type == UnityEngine.Rendering.ShaderPropertyType.Float) value = m.GetFloat(name).ToString("0.###");
+                else if (type == UnityEngine.Rendering.ShaderPropertyType.Vector) value = m.GetVector(name).ToString();
+                else if (type == UnityEngine.Rendering.ShaderPropertyType.Color) value = m.GetColor(name).ToString();
+                else continue;
+                Mod.logger.LogInfo($"[SonarTrace] fxmat {m.name}.{name} = {value}");
+            }
+        }
+
+        // Sample the candidate positions and the screen FX material values
+        // during the window. The offset relative to the VR camera is the
+        // discriminator: constant while the head moves = camera-anchored
+        // (the stereo bug), growing = world-anchored wave.
         public static void Sample()
         {
             if (!WindowOpen) return;
             if (sampleFrame >= 0 && Time.frameCount - sampleFrame < RescanEveryFrames) return;
             sampleFrame = Time.frameCount;
+
+            if (fxMaterial != null)
+            {
+                LogMaterialProperties(fxMaterial);
+            }
 
             var rig = VRCameraRig.instance;
             if (rig == null || rig.vrCamera == null) return;
@@ -353,7 +362,9 @@ namespace SubmersedVR
     }
 
     // Screen-space sonar ping FX. Logged unconditionally (not only during an
-    // open window) so a call outside the ping window is still visible in the log.
+    // open window) so a call outside the ping window is still visible in the
+    // log. Also logs the component context and the material property values:
+    // the grid texture is likely driven by one of these properties.
     [HarmonyPatch(typeof(SonarScreenFX), nameof(SonarScreenFX.Ping))]
     static class SonarTraceScreenFX
     {
@@ -361,6 +372,11 @@ namespace SubmersedVR
         static void Postfix(SonarScreenFX __instance)
         {
             Mod.logger.LogInfo($"[SonarTrace] SonarScreenFX.Ping: pingDistance={__instance.pingDistance} waveDuration={__instance.waveDuration} shaderID={__instance.pingDistanceShaderID} material={__instance._material?.name} window={SonarStereoTrace.WindowOpen}");
+            var go = __instance.gameObject;
+            Mod.logger.LogInfo($"[SonarTrace] SonarScreenFX go={go.name} active={go.activeInHierarchy} pos={go.transform.position}");
+            SonarStereoTrace.LogParentChain("SonarScreenFX", go.transform);
+            SonarStereoTrace.fxMaterial = __instance._material;
+            SonarStereoTrace.LogMaterialProperties(__instance._material);
         }
     }
 

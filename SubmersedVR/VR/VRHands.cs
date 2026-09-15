@@ -168,6 +168,7 @@ namespace SubmersedVR
         {
             instance = this;
             this.ik = ik;
+            Settings.PDAHandAngleChanged += OnPDAHandAngleChanged;
 
             leftHand = ik.solver.leftHandEffector.bone;
             rightHand = ik.solver.rightHandEffector.bone;
@@ -209,7 +210,20 @@ namespace SubmersedVR
         }
         public void OnOpenPDA()
         {
-            HandOffsets.PDA.Apply(leftTarget);
+            var pdaOffset = HandOffsets.PDA;
+            leftTarget.localPosition = pdaOffset.Pos;
+            // User calibrated twist of the PDA in the hand, composed after the base
+            // pose so that each axis stays independent of the others
+            leftTarget.localRotation = Quaternion.Euler(pdaOffset.Angles) * Quaternion.Euler(Settings.PDAHandAngleX, Settings.PDAHandAngleY, Settings.PDAHandAngleZ);
+        }
+
+        void OnPDAHandAngleChanged(float value)
+        {
+            var pda = Player.main?.GetPDA();
+            if (pda != null && pda.isInUse)
+            {
+                OnOpenPDA();
+            }
         }
         public void OnClosePDA()
         {
@@ -312,6 +326,11 @@ namespace SubmersedVR
 
         }
 
+
+        void OnDestroy()
+        {
+            Settings.PDAHandAngleChanged -= OnPDAHandAngleChanged;
+        }
 
         void Update()
         {
@@ -502,6 +521,76 @@ namespace SubmersedVR
         public static void Postfix()
         {
             VRHands.instance.OnClosePDA();
+        }
+    }
+
+    // Tracks whether the in-game menu is open. The menu panel's active state is not
+    // a reliable signal (it stays active while the menu is closed), so the state is
+    // tracked explicitly from the menu's own Open/Close calls.
+    internal static class IngameMenuState
+    {
+        internal static bool IsOpen = false;
+    }
+
+    [HarmonyPatch(typeof(IngameMenu), nameof(IngameMenu.Open))]
+    static class IngameMenuOpenState
+    {
+        static void Postfix()
+        {
+            IngameMenuState.IsOpen = true;
+        }
+    }
+
+    [HarmonyPatch(typeof(IngameMenu), nameof(IngameMenu.Close))]
+    static class IngameMenuCloseState
+    {
+        static void Postfix()
+        {
+            IngameMenuState.IsOpen = false;
+        }
+    }
+
+    [HarmonyPatch(typeof(IngameMenu), nameof(IngameMenu.ClosePanel))]
+    static class IngameMenuClosePanelState
+    {
+        static void Postfix()
+        {
+            IngameMenuState.IsOpen = false;
+        }
+    }
+
+    // Safety: reset the state if the menu object is destroyed (scene unload)
+    [HarmonyPatch(typeof(IngameMenu), nameof(IngameMenu.OnDestroy))]
+    static class IngameMenuDestroyState
+    {
+        static void Postfix()
+        {
+            IngameMenuState.IsOpen = false;
+        }
+    }
+
+    // Keep the PDA open while the in-game menu is showing, so the PDA hand angle
+    // sliders can be calibrated with the PDA visible in the hand
+    [HarmonyPatch(typeof(PDA), nameof(PDA.Close))]
+    public static class KeepPDAOpenWhileMenuOpen
+    {
+        public static bool Prefix()
+        {
+            return !IngameMenuState.IsOpen;
+        }
+    }
+
+    // Open the PDA when the in-game menu opens, so it is visible while calibrating
+    [HarmonyPatch(typeof(IngameMenu), nameof(IngameMenu.Open))]
+    public static class OpenPDAWithIngameMenu
+    {
+        public static void Postfix()
+        {
+            var pda = Player.main?.GetPDA();
+            if (pda != null && !pda.isInUse)
+            {
+                pda.Open();
+            }
         }
     }
 

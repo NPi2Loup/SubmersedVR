@@ -38,11 +38,26 @@ namespace SubmersedVR
         public static bool PutBarsOnWrist;
         public static event BooleanChanged PutBarsOnWristChanged;
 
+        public static float VehicleRecenterDelay = 1.0f;
+
         public static bool AreGameHapticsEnabled = false;
         public static bool AreUIHapticsEnabled = false;
         public static bool ArticulatedHands = false;
         public static bool HandBasedTurning = false;
         public static bool LeftHandBasedTurning = false;
+        public static float HandMovementPitchOffset = 45.0f;
+        // Session-only visual aid (internal = not picked up by the reflection serializer)
+        internal static bool ShowMovementLaser = false;
+
+        public static bool ShoulderPDA = true;
+        public static string PDAReachZone = "Shoulder";
+        public static float PDAHandAngleX = 0f;
+        public static float PDAHandAngleY = 0f;
+        public static float PDAHandAngleZ = 0f;
+        public static event FloatChanged PDAHandAngleChanged;
+
+        public static bool PhysicalKnifeSwing = true;
+        public static float KnifeSwingSpeedThreshold = 2.3f;
 
         //Ambient Occlusion Settings
         public static bool AOEnabled = true;
@@ -107,6 +122,8 @@ namespace SubmersedVR
                 HandBasedTurning = value == "Right Hand Based" || value == "Left Hand Based";
                 LeftHandBasedTurning = value == "Left Hand Based";
             });
+            panel.AddSliderOption(tab, "Hand Movement Pitch Offset", HandMovementPitchOffset, 0f, 90f, HandMovementPitchOffset, 1f, (value) => { HandMovementPitchOffset = value; }, SliderLabelMode.Float, "0", "Pitch of the movement reference relative to the controller (hand based movement modes only). 45 = legacy behavior, 0 = move where the controller points.");
+            panel.AddToggleOption(tab, "Show Movement Laser", ShowMovementLaser, (value) => { ShowMovementLaser = value; }, "Green laser from the active hand showing the movement axis (hand based movement modes only). Use it while adjusting the pitch offset. Not saved between sessions.");
             panel.AddToggleOption(tab, "Enable Snap Turning", IsSnapTurningEnabled, (value) =>
             {
                 IsSnapTurningEnabled = value;
@@ -125,8 +142,15 @@ namespace SubmersedVR
             });
 
             panel.AddHeading(tab, "Immersion");
+            panel.AddToggleOption(tab, "Shoulder PDA", ShoulderPDA, (value) => { ShoulderPDA = value; }, "Reach your left hand to the PDA zone and press left grip to open/close the PDA. The regular PDA button keeps working.");
+            panel.AddChoiceOption<string>(tab, "PDA Reach Zone", new string[] { "Shoulder", "Hip" }, PDAReachZone, (value) => { PDAReachZone = value; });
+            panel.AddSliderOption(tab, "PDA Hand Angle X(°)", PDAHandAngleX, -30f, 30f, PDAHandAngleX, 1f, (value) => { PDAHandAngleX = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", "Rotates the PDA in the left hand around the X axis. Calibrate with the PDA open.");
+            panel.AddSliderOption(tab, "PDA Hand Angle Y(°)", PDAHandAngleY, -30f, 30f, PDAHandAngleY, 1f, (value) => { PDAHandAngleY = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", null);
+            panel.AddSliderOption(tab, "PDA Hand Angle Z(°)", PDAHandAngleZ, -30f, 30f, PDAHandAngleZ, 1f, (value) => { PDAHandAngleZ = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", null);
             panel.AddToggleOption(tab, "Put survival meter on left wrist", PutBarsOnWrist, (value) => { PutBarsOnWrist = value; PutBarsOnWristChanged(value); });
             panel.AddToggleOption(tab, "Articulated Hands", ArticulatedHands, (value) => { ArticulatedHands = value; }, "Hands animate based on the movement of your physical hands.");
+            panel.AddToggleOption(tab, "Physical Knife Swing", PhysicalKnifeSwing, (value) => { PhysicalKnifeSwing = value; }, "Swing your right controller to attack with the knife instead of pressing the trigger.");
+            panel.AddSliderOption(tab, "Knife Swing Speed Threshold", KnifeSwingSpeedThreshold, 0.5f, 4.0f, KnifeSwingSpeedThreshold, 0.1f, (value) => { KnifeSwingSpeedThreshold = value; }, SliderLabelMode.Float, "0.0", "Minimum controller speed (m/s) to trigger a swing.");
             panel.AddToggleOption(tab, "Enable Game Haptics(WIP)", AreGameHapticsEnabled, (value) => { AreGameHapticsEnabled = value; }, "Enable controller vibration while interacting with world objects.");
             panel.AddToggleOption(tab, "Enable UI Haptics(WIP)", AreUIHapticsEnabled, (value) => { AreUIHapticsEnabled = value; }, "Enable controller vibration while interacting with the User Interface.");
             panel.AddChoiceOption<string>(tab, "Show Laser Pointer", new string[] { "Always", "Default", "Never" }, ShowLaserPointer, (value) =>
@@ -138,6 +162,9 @@ namespace SubmersedVR
             panel.AddToggleOption(tab, "Put hand reticle on laserpointer end", PutHandReticleOnLaserPointer, (value) => { PutHandReticleOnLaserPointer = value; PutHandReticleOnLaserPointerChanged(value); });
             panel.AddToggleOption(tab, "Invert Y Axis in Seamoth/Cameras", InvertYAxis, (value) => { InvertYAxis = value; InvertYAxisChanged(value); }, "Enables Y axis inversion for Seamoth and Cameras.");
             //panel.AddToggleOption(tab, "Enable Particle Fix", EnableParticleFix, (value) => { EnableParticleFix = value; }, "Enables Particle Optimizations.");
+
+            panel.AddHeading(tab, "Vehicles");
+            panel.AddSliderOption(tab, "Vehicle Recenter Delay(s)", VehicleRecenterDelay, 0f, 2f, VehicleRecenterDelay, 0.1f, (value) => { VehicleRecenterDelay = value; }, SliderLabelMode.Float, "0.0", "Delay before the VR view is recentered after entering a vehicle, so you can straighten your head first. 1s matches the vehicle entry transition.");
 
             panel.AddHeading(tab, "Hidden/Advanced VR Settings(Those can cause motion sickness!)");
             panel.AddToggleOption(tab, "Enable pitching(Looking Up/Down) while diving", !VROptions.disableInputPitch, (value) => { VROptions.disableInputPitch = !value; }, "This allows you to pitch up and down using the right thumbstick when diving. Can be very disorienting! I recommend to keep this disabled!");

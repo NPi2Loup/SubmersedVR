@@ -14,9 +14,6 @@ namespace SubmersedVR
     /// </summary>
     public class KnifeHitboxDebug : MonoBehaviour
     {
-        // Must match PlayerTool.TraceForTarget's default sphere radius
-        private const float SphereRadius = 0.2f;
-
         // How long the hitboxes flash after a swing is fired
         private const float BlinkDuration = 0.2f;
 
@@ -67,17 +64,19 @@ namespace SubmersedVR
             {
                 Transform hand = VRCameraRig.instance.rightController.transform;
                 Vector3 aim = VRCameraRig.instance.laserPointer.transform.forward;
-                float length = Mathf.Max(knife.attackDist, SphereRadius * 2f);
+                float radius = PhysicalKnifeSwing.TraceSphereRadius;
+                float length = Mathf.Max(knife.attackDist, radius * 2f);
                 float scale = PhysicalKnifeSwing.ProbeRadiusScale;
 
-                // A: the current probe (detection zone that triggers the attack)
+                // A: the current probe (detection zone that triggers the attack).
+                // A SphereCast sweeps a capsule of total length length + 2*radius.
                 var probePts = new List<Vector3>(256);
-                BuildCapsuleWireframe(probePts, hand.position + aim * (length * 0.5f), aim, length, SphereRadius * scale);
+                BuildCapsuleWireframe(probePts, hand.position + aim * (length * 0.5f), aim, length + 2f * radius * scale, radius * scale);
                 SetLine(probeLine, probePts);
 
                 // B: the game's real hitbox (always the unscaled game geometry)
                 var gamePts = new List<Vector3>(256);
-                BuildCapsuleWireframe(gamePts, hand.position + aim * (length * 0.5f), aim, length, SphereRadius);
+                BuildCapsuleWireframe(gamePts, hand.position + aim * (length * 0.5f), aim, length + 2f * radius, radius);
                 SetLine(gameLine, gamePts);
             }
 

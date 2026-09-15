@@ -4,66 +4,44 @@ using UnityEngine;
 
 namespace SubmersedVR
 {
-    // Diagnostic (temporary): log global shader uniform writes and per-eye camera
-    // positions while a sonar ping is active, to find what makes the scan wave
+    // Diagnostic (temporary): log the stereo rendering state and the sonar ping
+    // call chain while a sonar ping is active, to find what makes the scan wave
     // render differently in each eye in stereo VR.
+    // UnityEngine engine methods (Shader.SetGlobal*, Material.Set*) are native
+    // with no managed body and cannot be patched with Harmony, so this trace
+    // only patches game assembly methods.
     static class SonarStereoTrace
     {
         private const float WindowDuration = 3f;
-        private const int MaxLines = 500;
 
-        public static float windowEnd = -1f;
-        static int lines;
-        static HashSet<string> seen;
-        static HashSet<string> seenEye;
-        public static Dictionary<int, string> idToName = new Dictionary<int, string>();
+        static float windowEnd = -1f;
+        static bool windowActive;
 
-        public static bool WindowOpen => Time.time <= windowEnd;
+        public static bool WindowOpen => windowActive && Time.time <= windowEnd;
 
         public static void OpenWindow(string source)
         {
-            if (windowEnd < Time.time)
+            if (!WindowOpen)
             {
                 windowEnd = Time.time + WindowDuration;
-                lines = 0;
-                seen = new HashSet<string>();
-                seenEye = new HashSet<string>();
+                windowActive = true;
+                SonarTraceEyeLogger.ResetSeen();
                 Mod.logger.LogInfo($"[SonarTrace] ping ({source}) - log window open for {WindowDuration}s");
-                if (SNCameraRoot.main != null)
+                var root = SNCameraRoot.main;
+                if (root != null)
                 {
-                    Mod.logger.LogInfo($"[SonarTrace] stereoSeparation = {SNCameraRoot.main.stereoSeparation}");
+                    Mod.logger.LogInfo($"[SonarTrace] stereoSeparation={root.stereoSeparation}");
+                    Mod.logger.LogInfo($"[SonarTrace] matrixLeftEye={root.matrixLeftEye}");
+                    Mod.logger.LogInfo($"[SonarTrace] matrixRightEye={root.matrixRightEye}");
                 }
             }
         }
 
-        public static void LogCall(string name, string value)
+        public static void Log(string msg)
         {
-            if (!WindowOpen || lines >= MaxLines || name == null) return;
-            string key = name + "=" + value;
-            if (seen.Add(key))
+            if (WindowOpen)
             {
-                lines++;
-                Mod.logger.LogInfo($"[SonarTrace] {key}");
-            }
-        }
-
-        // Material properties are written every frame for many materials,
-        // so only log the ones that look sonar-related
-        public static bool IsSonarName(string name)
-        {
-            if (name == null) return false;
-            return name.IndexOf("scan", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || name.IndexOf("sonar", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || name.IndexOf("ping", System.StringComparison.OrdinalIgnoreCase) >= 0
-                || name.IndexOf("wave", System.StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        public static void LogEye(string eye, string pos)
-        {
-            if (!WindowOpen) return;
-            if (seenEye.Add(eye))
-            {
-                Mod.logger.LogInfo($"[SonarTrace] render camera {eye} pos {pos}");
+                Mod.logger.LogInfo($"[SonarTrace] {msg}");
             }
         }
     }
@@ -71,10 +49,21 @@ namespace SubmersedVR
     // Logs the render camera position once per stereo eye during the trace window
     class SonarTraceEyeLogger : MonoBehaviour
     {
+        static HashSet<string> seen = new HashSet<string>();
+
+        public static void ResetSeen()
+        {
+            seen.Clear();
+        }
+
         void OnPreRender()
         {
             if (!SonarStereoTrace.WindowOpen || Camera.current == null) return;
-            SonarStereoTrace.LogEye(Camera.current.stereoTargetEye.ToString(), transform.position.ToString());
+            string eye = Camera.current.stereoTargetEye.ToString();
+            if (seen.Add(eye))
+            {
+                SonarStereoTrace.Log($"render camera {eye} pos={transform.position} stereoSep={Camera.current.stereoSeparation}");
+            }
         }
     }
 
@@ -118,119 +107,46 @@ namespace SubmersedVR
         }
     }
 
-    // Record PropertyToID mappings so ID-based uniform writes can be named
-    [HarmonyPatch(typeof(Shader), nameof(Shader.PropertyToID))]
-    static class SonarTracePropertyToID
+    // World scan sweep VFX
+    [HarmonyPatch(typeof(VFXScan), nameof(VFXScan.StartScan))]
+    static class SonarTraceVFXScan
     {
         [HarmonyPostfix]
-        static void Postfix(string name, int __result)
+        static void Postfix(VFXScan __instance)
         {
-            SonarStereoTrace.idToName[__result] = name;
+            SonarStereoTrace.Log($"VFXScan.StartScan: active={__instance.scanActive} duration={__instance.scanDuration} renderers={__instance.renderers?.Length}");
         }
     }
 
-    // Global shader uniform writes during the window
-    [HarmonyPatch(typeof(Shader), nameof(Shader.SetGlobalFloat))]
-    static class SonarTraceSetGlobalFloat
+    // Per-camera CommandBuffer scan VFX (one buffer per eye in stereo)
+    [HarmonyPatch(typeof(VFXScanning), nameof(VFXScanning.StartScan))]
+    static class SonarTraceVFXScanning
     {
-        [HarmonyPrefix]
-        static void Prefix(string name, float value)
+        [HarmonyPostfix]
+        static void Postfix(VFXScanning __instance, Material mat)
         {
-            SonarStereoTrace.LogCall(name, value.ToString("F4"));
-        }
-
-        [HarmonyPrefix]
-        static void Prefix(int nameID, float value)
-        {
-            SonarStereoTrace.LogCall(SonarStereoTrace.idToName.TryGetValue(nameID, out var name) ? name : "id" + nameID, value.ToString("F4"));
-        }
-    }
-
-    [HarmonyPatch(typeof(Shader), nameof(Shader.SetGlobalVector))]
-    static class SonarTraceSetGlobalVector
-    {
-        [HarmonyPrefix]
-        static void Prefix(string name, Vector3 value)
-        {
-            SonarStereoTrace.LogCall(name, value.ToString("F3"));
-        }
-
-        [HarmonyPrefix]
-        static void Prefix(int nameID, Vector3 value)
-        {
-            SonarStereoTrace.LogCall(SonarStereoTrace.idToName.TryGetValue(nameID, out var name) ? name : "id" + nameID, value.ToString("F3"));
-        }
-    }
-
-    [HarmonyPatch(typeof(Shader), nameof(Shader.SetGlobalColor))]
-    static class SonarTraceSetGlobalColor
-    {
-        [HarmonyPrefix]
-        static void Prefix(string name, Color value)
-        {
-            SonarStereoTrace.LogCall(name, value.ToString("F3"));
-        }
-
-        [HarmonyPrefix]
-        static void Prefix(int nameID, Color value)
-        {
-            SonarStereoTrace.LogCall(SonarStereoTrace.idToName.TryGetValue(nameID, out var name) ? name : "id" + nameID, value.ToString("F3"));
-        }
-    }
-
-    [HarmonyPatch(typeof(Shader), nameof(Shader.SetGlobalInt))]
-    static class SonarTraceSetGlobalInt
-    {
-        [HarmonyPrefix]
-        static void Prefix(string name, int value)
-        {
-            SonarStereoTrace.LogCall(name, value.ToString());
-        }
-
-        [HarmonyPrefix]
-        static void Prefix(int nameID, int value)
-        {
-            SonarStereoTrace.LogCall(SonarStereoTrace.idToName.TryGetValue(nameID, out var name) ? name : "id" + nameID, value.ToString());
-        }
-    }
-
-    // Material uniform writes, only the sonar-looking names
-    [HarmonyPatch(typeof(Material), nameof(Material.SetFloat))]
-    static class SonarTraceMaterialSetFloat
-    {
-        [HarmonyPrefix]
-        static void Prefix(Material material, string name, float value)
-        {
-            if (SonarStereoTrace.IsSonarName(name))
+            string cameras = "none";
+            if (__instance.m_Cameras != null && __instance.m_Cameras.Count > 0)
             {
-                SonarStereoTrace.LogCall("mat." + material.name + "." + name, value.ToString("F4"));
+                var names = new List<string>();
+                foreach (var camera in __instance.m_Cameras.Keys)
+                {
+                    names.Add(camera.name);
+                }
+                cameras = string.Join(",", names);
             }
+            SonarStereoTrace.Log($"VFXScanning.StartScan: material={mat?.name} renderers={__instance.renderersToScan?.Count} cameras=[{cameras}]");
         }
     }
 
-    [HarmonyPatch(typeof(Material), nameof(Material.SetVector))]
-    static class SonarTraceMaterialSetVector
+    // Screen-space sonar ping FX
+    [HarmonyPatch(typeof(SonarScreenFX), nameof(SonarScreenFX.Ping))]
+    static class SonarTraceScreenFX
     {
-        [HarmonyPrefix]
-        static void Prefix(Material material, string name, Vector3 value)
+        [HarmonyPostfix]
+        static void Postfix(SonarScreenFX __instance)
         {
-            if (SonarStereoTrace.IsSonarName(name))
-            {
-                SonarStereoTrace.LogCall("mat." + material.name + "." + name, value.ToString("F3"));
-            }
-        }
-    }
-
-    [HarmonyPatch(typeof(Material), nameof(Material.SetColor))]
-    static class SonarTraceMaterialSetColor
-    {
-        [HarmonyPrefix]
-        static void Prefix(Material material, string name, Color value)
-        {
-            if (SonarStereoTrace.IsSonarName(name))
-            {
-                SonarStereoTrace.LogCall("mat." + material.name + "." + name, value.ToString("F3"));
-            }
+            SonarStereoTrace.Log($"SonarScreenFX.Ping: pingDistance={__instance.pingDistance} waveDuration={__instance.waveDuration} shaderID={__instance.pingDistanceShaderID} material={__instance._material?.name}");
         }
     }
 

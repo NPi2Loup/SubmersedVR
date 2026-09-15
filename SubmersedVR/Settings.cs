@@ -35,6 +35,8 @@ namespace SubmersedVR
         public static bool PutHandReticleOnLaserPointer;
         public static event BooleanChanged PutHandReticleOnLaserPointerChanged;
 
+        public static bool ReticleFaceFlip;
+
         public static bool PutBarsOnWrist;
         public static event BooleanChanged PutBarsOnWristChanged;
 
@@ -163,6 +165,7 @@ namespace SubmersedVR
 
             panel.AddHeading(tab, "Experimental");
             panel.AddToggleOption(tab, "Put hand reticle on laserpointer end", PutHandReticleOnLaserPointer, (value) => { PutHandReticleOnLaserPointer = value; PutHandReticleOnLaserPointerChanged(value); });
+            panel.AddToggleOption(tab, "Flip hand reticle face", ReticleFaceFlip, (value) => { ReticleFaceFlip = value; }, "Flip the hand reticle 180 degrees if its text is seen from behind.");
             panel.AddToggleOption(tab, "Invert Y Axis in Seamoth/Cameras", InvertYAxis, (value) => { InvertYAxis = value; InvertYAxisChanged(value); }, "Enables Y axis inversion for Seamoth and Cameras.");
             //panel.AddToggleOption(tab, "Enable Particle Fix", EnableParticleFix, (value) => { EnableParticleFix = value; }, "Enables Particle Optimizations.");
 

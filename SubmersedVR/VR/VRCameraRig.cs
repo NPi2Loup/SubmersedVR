@@ -48,6 +48,7 @@ namespace SubmersedVR
         public Camera uiCamera = null;
         public GameObject worldTarget;
         public float worldTargetDistance;
+        public float worldTargetTime;
         public Transform rigParentTarget;
 
         public Camera UIControllerCamera
@@ -373,7 +374,15 @@ namespace SubmersedVR
         {
             this.worldTarget = activeTarget;
             this.worldTargetDistance = activeHitDistance;
+            this.worldTargetTime = Time.unscaledTime;
             this.laserPointerUI.SetWorldTarget(worldTarget, worldTargetDistance);
+        }
+
+        // True while the aim is on a targetable object, with the same 0.5 s
+        // timeout the laser pointer uses for its dot
+        public bool HasWorldTarget()
+        {
+            return worldTarget != null && Time.unscaledTime - worldTargetTime < 0.5f;
         }
     }
 

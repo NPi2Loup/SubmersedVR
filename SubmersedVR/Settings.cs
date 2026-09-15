@@ -57,9 +57,7 @@ namespace SubmersedVR
         public static event FloatChanged PDAHandAngleChanged;
 
         public static bool PhysicalKnifeSwing = true;
-        public static float KnifeSwingSpeedThreshold = 2.3f;
-        public static float KnifeProbeRadiusScale = 1.5f;
-        public static float KnifeSwingWindow = 0.2f;
+        public static float KnifeSwingSpeedThreshold = 4.0f;
 
         //Ambient Occlusion Settings
         public static bool AOEnabled = true;
@@ -152,7 +150,6 @@ namespace SubmersedVR
             panel.AddToggleOption(tab, "Put survival meter on left wrist", PutBarsOnWrist, (value) => { PutBarsOnWrist = value; PutBarsOnWristChanged(value); });
             panel.AddToggleOption(tab, "Articulated Hands", ArticulatedHands, (value) => { ArticulatedHands = value; }, "Hands animate based on the movement of your physical hands.");
             panel.AddToggleOption(tab, "Physical Knife Swing", PhysicalKnifeSwing, (value) => { PhysicalKnifeSwing = value; }, "Swing your right controller to attack with the knife instead of pressing the trigger.");
-            panel.AddSliderOption(tab, "Knife Swing Speed Threshold", KnifeSwingSpeedThreshold, 0.5f, 4.0f, KnifeSwingSpeedThreshold, 0.1f, (value) => { KnifeSwingSpeedThreshold = value; }, SliderLabelMode.Float, "0.0", "Minimum controller speed (m/s) to trigger a swing.");
             panel.AddToggleOption(tab, "Enable Game Haptics(WIP)", AreGameHapticsEnabled, (value) => { AreGameHapticsEnabled = value; }, "Enable controller vibration while interacting with world objects.");
             panel.AddToggleOption(tab, "Enable UI Haptics(WIP)", AreUIHapticsEnabled, (value) => { AreUIHapticsEnabled = value; }, "Enable controller vibration while interacting with the User Interface.");
             panel.AddChoiceOption<string>(tab, "Show Laser Pointer", new string[] { "Always", "Default", "Never" }, ShowLaserPointer, (value) =>
@@ -175,8 +172,7 @@ namespace SubmersedVR
 
             panel.AddHeading(tab, "Debug Options");
             panel.AddToggleOption(tab, "Debug Overlays", IsDebugEnabled, (value) => { IsDebugEnabled = value; IsDebugChanged(value); }, "Enables Debug Overlays and Logs.");
-            panel.AddSliderOption(tab, "Swing Probe Radius", KnifeProbeRadiusScale, 0.5f, 1.5f, KnifeProbeRadiusScale, 0.1f, (value) => { KnifeProbeRadiusScale = value; }, SliderLabelMode.Float, "0.0", "Inflates the swing detection radius (1.0 = the games 0.2 m trace radius).");
-            panel.AddSliderOption(tab, "Swing Detection Window(s)", KnifeSwingWindow, 0.2f, 1.0f, KnifeSwingWindow, 0.1f, (value) => { KnifeSwingWindow = value; }, SliderLabelMode.Float, "0.0", "How long a swing stays armed waiting for a target before firing a whiff.");
+            panel.AddSliderOption(tab, "Knife Swing Speed Threshold", KnifeSwingSpeedThreshold, 2.0f, 5.0f, KnifeSwingSpeedThreshold, 0.1f, (value) => { KnifeSwingSpeedThreshold = value; }, SliderLabelMode.Float, "0.0", "Minimum controller speed (m/s) to trigger a knife swing.");
             panel.AddToggleOption(tab, "Always show controllers", AlwaysShowControllers, (value) => { AlwaysShowControllers = value; AlwaysShowControllersChanged(value); }, "Shows the controllers at all times.");
             //panel.AddToggleOption(tab, "Always show laserpointer", AlwaysShowLaserPointer, (value) => { AlwaysShowLaserPointer = value; AlwaysShowLaserPointerChanged(value); }, "Show the laserpointer at all times.");
 

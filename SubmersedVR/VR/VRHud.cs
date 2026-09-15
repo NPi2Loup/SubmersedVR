@@ -67,16 +67,12 @@ namespace SubmersedVR
         public static void SetupHandReticleLaserPointer()
         {
             var rig = VRCameraRig.instance;
-            var dot = rig.laserPointerUI.pointerDot.transform;
-            // Establish the current size under the pointer dot first...
-            var handReticle = HandReticle.main.gameObject.WithParent(dot);
-            handReticle.transform.localPosition = new Vector3(0, -5, dot.localPosition.z);
-            handReticle.transform.localScale = dot.localScale * 2;
-            // ...then detach it from the pointer hierarchy (unknown, possibly
-            // non-uniform scale) and re-parent it directly under the UI camera,
-            // where per-frame orientation is exact (see ReticleBillboard)
-            Vector3 worldScale = handReticle.transform.lossyScale;
-            handReticle.WithParent(rig.uiCamera.transform);
+            // Same anchor and size as hand mode (see SetupHandReticleOnHand);
+            // only the orientation is billboarded to the view per frame
+            // (ReticleBillboard)
+            var handReticle = HandReticle.main.gameObject.WithParent(rig.rightControllerUI.transform);
+            handReticle.transform.localPosition = new Vector3(0, 0, 0.05f);
+            handReticle.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
             var canvas = handReticle.GetComponent<Canvas>();
             if (canvas == null)
             {
@@ -85,10 +81,6 @@ namespace SubmersedVR
             canvas.renderMode = RenderMode.WorldSpace;
             canvas.worldCamera = rig.uiCamera;
             handReticle.layer = LayerID.UI;
-            Vector3 camScale = rig.uiCamera.transform.lossyScale;
-            handReticle.transform.localScale = new Vector3(worldScale.x / camScale.x, worldScale.y / camScale.y, worldScale.z / camScale.z);
-            // Fixed face toward the player: the canvas front is -Z under the camera
-            handReticle.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
         }
 
         public static void OnHandReticleSettingChanged(bool onLaserPointer)

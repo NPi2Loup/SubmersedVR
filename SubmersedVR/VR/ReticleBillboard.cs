@@ -1,39 +1,35 @@
 using UnityEngine;
 namespace SubmersedVR
 {
-    // Keeps the hand reticle following the laser dot. The reticle is a direct
-    // child of the UI camera (a scale-1, pure-rotation parent, see
-    // VRHud.SetupHandReticleLaserPointer), so only its local position is
-    // updated per frame; the rotation is fixed at setup (Euler 0,180,0 under
-    // the camera), keeping the reticle plane parallel to the view plane:
-    // perpendicular to the view, rolling 1:1 with the head, without tilting
-    // when looking up/down.
-    // The reticle follows the laser dot only while the aim is on a targetable
-    // object; otherwise it stays at the hand, as without the laser pointer
-    // option. Only active in laser pointer mode.
+    // Keeps the hand reticle readable in laser pointer mode. The reticle stays
+    // at the hand (same anchor and offset as hand mode, see
+    // VRHud.SetupHandReticleOnHand); this only re-aims its plane to the view
+    // every frame, so the text stays upright and readable no matter how the
+    // tool model is held (e.g. the knife is stored about 90 degrees turned in
+    // the hand, which rolls the reticle in hand mode). The per-frame write also
+    // wins against the game's own HandReticle.LateUpdate, which otherwise
+    // re-positions and re-rotates the reticle to its non-VR anchor.
     public class ReticleBillboard : MonoBehaviour
     {
+        // Hand-mode anchor offset (see SetupHandReticleOnHand)
+        private static readonly Vector3 AnchorOffset = new Vector3(0f, 0f, 0.05f);
+
         void LateUpdate()
         {
             var rig = VRCameraRig.instance;
-            if (rig == null || rig.uiCamera == null || rig.laserPointerUI == null)
+            if (rig == null || rig.uiCamera == null || rig.rightControllerUI == null)
             {
                 return;
             }
-            var cam = rig.uiCamera.transform;
-            if (transform.parent != cam)
+            var anchor = rig.rightControllerUI.transform;
+            if (transform.parent != anchor)
             {
                 return;
             }
-            bool hasTarget = rig.HasWorldTarget();
-            Transform anchor = hasTarget ? rig.laserPointerUI.pointerDot.transform : rig.rightControllerUI.transform;
-            Vector3 local = cam.InverseTransformPoint(anchor.position);
-            // Keep a little below the dot, as in the original placement
-            if (hasTarget)
-            {
-                local.y -= 0.05f;
-            }
-            transform.localPosition = local;
+            transform.localPosition = AnchorOffset;
+            // Face the view plane: upright text, rolling 1:1 with the head,
+            // without tilting when looking up/down
+            transform.rotation = rig.uiCamera.transform.rotation;
         }
     }
 }

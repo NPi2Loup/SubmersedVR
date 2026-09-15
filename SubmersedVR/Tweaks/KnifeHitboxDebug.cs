@@ -72,14 +72,7 @@ namespace SubmersedVR
 
                 // A: the current probe (detection zone that triggers the attack)
                 var probePts = new List<Vector3>(256);
-                if (Settings.KnifeProbeShape == "Sphere")
-                {
-                    BuildSphereWireframe(probePts, hand.position, length * scale);
-                }
-                else
-                {
-                    BuildCapsuleWireframe(probePts, hand.position + aim * (length * 0.5f), aim, length, SphereRadius * scale);
-                }
+                BuildCapsuleWireframe(probePts, hand.position + aim * (length * 0.5f), aim, length, SphereRadius * scale);
                 SetLine(probeLine, probePts);
 
                 // B: the game's real hitbox (always the unscaled game geometry)
@@ -154,24 +147,6 @@ namespace SubmersedVR
                     float theta = i * Mathf.PI * 2f / RingSegments;
                     Vector3 radialDir = u * Mathf.Cos(theta) + v * Mathf.Sin(theta);
                     stroke.Add(center + dir * axial + radialDir * radius);
-                }
-                AppendStroke(points, stroke);
-            }
-        }
-
-        // Wireframe of a sphere: three great circles
-        private static void BuildSphereWireframe(List<Vector3> points, Vector3 center, float radius)
-        {
-            const int Segments = 16;
-            var stroke = new List<Vector3>(Segments + 1);
-            foreach (Vector3 axis in new[] { Vector3.up, Vector3.right, Vector3.forward })
-            {
-                GetBasis(axis, out Vector3 u, out Vector3 v);
-                stroke.Clear();
-                for (int i = 0; i <= Segments; i++)
-                {
-                    float theta = i * Mathf.PI * 2f / Segments;
-                    stroke.Add(center + (u * Mathf.Cos(theta) + v * Mathf.Sin(theta)) * radius);
                 }
                 AppendStroke(points, stroke);
             }

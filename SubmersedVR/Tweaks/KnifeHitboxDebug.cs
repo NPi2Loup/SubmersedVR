@@ -5,10 +5,10 @@ using UnityEngine;
 namespace SubmersedVR
 {
     /// <summary>
-    /// Debug visual for the knife's melee hitbox: a wireframe matching the game's trace
-    /// (0.2 m sphere radius, knife attack distance) along a selectable axis
-    /// (line of sight, laser pointer aim, head to hand, or the last swing direction).
-    /// Wireframe instead of a solid surface so it doesn't obscure the view.
+    /// Debug visual for the knife's melee hitbox: a wireframe capsule matching the
+    /// game's trace (0.2 m sphere radius, knife attack distance), starting at the
+    /// hand along the head to hand direction. Wireframe instead of a solid surface
+    /// so it doesn't obscure the view.
     /// Visible while a Knife/HeatBlade is held and the Debug Overlays option is on.
     /// </summary>
     public class KnifeHitboxDebug : MonoBehaviour
@@ -19,22 +19,13 @@ namespace SubmersedVR
         // How long the hitbox flashes after a swing is fired
         private const float BlinkDuration = 0.2f;
 
-        private static readonly Color VisionColor = new Color(1f, 0.6f, 0f, 0.9f);
-        private static readonly Color LaserColor = new Color(0f, 1f, 1f, 0.9f);
         private static readonly Color HeadToHandColor = new Color(1f, 1f, 0f, 0.9f);
-        private static readonly Color SwingColor = new Color(1f, 0f, 1f, 0.9f);
 
-        private LineRenderer visionLine;
-        private LineRenderer laserLine;
         private LineRenderer headToHandLine;
-        private LineRenderer swingLine;
 
         void Start()
         {
-            visionLine = CreateLine("KnifeHitboxVision", VisionColor);
-            laserLine = CreateLine("KnifeHitboxLaser", LaserColor);
             headToHandLine = CreateLine("KnifeHitboxHeadToHand", HeadToHandColor);
-            swingLine = CreateLine("KnifeHitboxSwing", SwingColor);
         }
 
         private LineRenderer CreateLine(string name, Color color)
@@ -60,15 +51,10 @@ namespace SubmersedVR
             bool knifeHeld = Inventory.main != null && Inventory.main.GetHeldTool() is Knife;
             bool ready = Settings.IsDebugEnabled
                 && VRCameraRig.instance != null && VRCameraRig.instance.vrCamera != null
-                && VRCameraRig.instance.laserPointer != null
+                && VRCameraRig.instance.rightController != null
                 && Player.main != null
                 && knifeHeld;
 
-            string axis = Settings.KnifeHitboxAxis;
-            bool showVision = axis == "Vision" || axis == "Vision + Laser";
-            bool showLaser = axis == "Laser Pointer" || axis == "Vision + Laser";
-            bool showHeadToHand = axis == "Head to Hand";
-            bool showSwing = axis == "Swing Direction";
             // Flash for a short time after a swing is fired
             bool justSwung = Time.time - PhysicalKnifeSwing.LastSwingTime < BlinkDuration;
             bool visible = justSwung ? Time.frameCount % 2 == 0 : true;
@@ -76,53 +62,18 @@ namespace SubmersedVR
             if (ready && Inventory.main.GetHeldTool() is Knife knife)
             {
                 Transform head = VRCameraRig.instance.vrCamera.transform;
-                Transform hand = VRCameraRig.instance.laserPointer.transform;
+                Transform hand = VRCameraRig.instance.rightController.transform;
                 float length = Mathf.Max(knife.attackDist, SphereRadius * 2f);
 
-                if (showVision)
-                {
-                    // Line of sight, from the head camera
-                    var pts = new List<Vector3>(256);
-                    BuildCapsuleWireframe(pts, head.position + head.forward * (length * 0.5f), head.forward, length);
-                    SetLine(visionLine, pts);
-                }
-                if (showLaser)
-                {
-                    // Aim direction of the hand (laser pointer)
-                    var pts = new List<Vector3>(256);
-                    BuildCapsuleWireframe(pts, hand.position + hand.forward * (length * 0.5f), hand.forward, length);
-                    SetLine(laserLine, pts);
-                }
-                if (showHeadToHand)
-                {
-                    // Direction from the head to the hand, where the knife is held
-                    Vector3 direction = Vector3.Normalize(hand.position - head.position);
-                    var pts = new List<Vector3>(256);
-                    BuildCapsuleWireframe(pts, head.position + direction * (length * 0.5f), direction, length);
-                    SetLine(headToHandLine, pts);
-                }
-                if (showSwing)
-                {
-                    // Last swing direction: box with length along the movement,
-                    // width along the pointer, fixed height
-                    Vector3 longAxis = PhysicalKnifeSwing.LastSwingDirection;
-                    Vector3 wide = hand.forward - longAxis * Vector3.Dot(hand.forward, longAxis);
-                    if (wide.sqrMagnitude < 0.0001f)
-                    {
-                        wide = Vector3.Cross(longAxis, Vector3.up);
-                    }
-                    wide.Normalize();
-                    Vector3 highAxis = Vector3.Cross(longAxis, wide).normalized;
-                    var pts = new List<Vector3>(64);
-                    BuildBoxWireframe(pts, hand.position + longAxis * (length * 0.5f), longAxis, wide, highAxis, length, SphereRadius * 2f, SphereRadius * 2f);
-                    SetLine(swingLine, pts);
-                }
+                // Full trace length from the hand, along the head to hand direction,
+                // where the knife is held
+                Vector3 direction = Vector3.Normalize(hand.position - head.position);
+                var pts = new List<Vector3>(256);
+                BuildCapsuleWireframe(pts, hand.position + direction * (length * 0.5f), direction, length);
+                SetLine(headToHandLine, pts);
             }
 
-            visionLine.enabled = ready && showVision && visible;
-            laserLine.enabled = ready && showLaser && visible;
-            headToHandLine.enabled = ready && showHeadToHand && visible;
-            swingLine.enabled = ready && showSwing && visible;
+            headToHandLine.enabled = ready && visible;
         }
 
         private static void SetLine(LineRenderer line, List<Vector3> points)
@@ -188,35 +139,6 @@ namespace SubmersedVR
                     Vector3 radialDir = u * Mathf.Cos(theta) + v * Mathf.Sin(theta);
                     stroke.Add(center + dir * axial + radialDir * SphereRadius);
                 }
-                AppendStroke(points, stroke);
-            }
-        }
-
-        // Wireframe of a box (12 edges)
-        private static void BuildBoxWireframe(List<Vector3> points, Vector3 center, Vector3 longAxis, Vector3 wideAxis, Vector3 highAxis, float length, float width, float height)
-        {
-            Vector3 hl = longAxis * (length * 0.5f);
-            Vector3 hw = wideAxis * (width * 0.5f);
-            Vector3 hh = highAxis * (height * 0.5f);
-            Vector3[] corners =
-            {
-                center - hl - hw - hh,
-                center + hl - hw - hh,
-                center + hl + hw - hh,
-                center - hl + hw - hh,
-                center - hl - hw + hh,
-                center + hl - hw + hh,
-                center + hl + hw + hh,
-                center - hl + hw + hh,
-            };
-            int[] edgeA = { 0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3 };
-            int[] edgeB = { 1, 2, 3, 0, 5, 6, 7, 4, 4, 5, 6, 7 };
-            var stroke = new List<Vector3>(2);
-            for (int i = 0; i < edgeA.Length; i++)
-            {
-                stroke.Clear();
-                stroke.Add(corners[edgeA[i]]);
-                stroke.Add(corners[edgeB[i]]);
                 AppendStroke(points, stroke);
             }
         }

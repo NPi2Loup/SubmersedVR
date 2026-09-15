@@ -5,10 +5,11 @@ using UnityEngine;
 namespace SubmersedVR
 {
     /// <summary>
-    /// Debug visual for the knife's melee hitbox: a wireframe capsule matching the
-    /// game's trace (0.2 m sphere radius, knife attack distance), starting at the
-    /// hand along the head to hand direction. Wireframe instead of a solid surface
-    /// so it doesn't obscure the view.
+    /// Debug visual for the knife's hitboxes: two wireframes flashing after a swing.
+    /// Yellow = the swing detection probe (the zone that triggers the attack, follows
+    /// the current probe settings). Orange = the game's real hitbox (0.2 m sphere
+    /// radius swept for the attack distance along the aim) - where damage actually
+    /// lands. Wireframe instead of a solid surface so it doesn't obscure the view.
     /// Visible while a Knife/HeatBlade is held and the Debug Overlays option is on.
     /// </summary>
     public class KnifeHitboxDebug : MonoBehaviour
@@ -16,16 +17,19 @@ namespace SubmersedVR
         // Must match PlayerTool.TraceForTarget's default sphere radius
         private const float SphereRadius = 0.2f;
 
-        // How long the hitbox flashes after a swing is fired
+        // How long the hitboxes flash after a swing is fired
         private const float BlinkDuration = 0.2f;
 
-        private static readonly Color HeadToHandColor = new Color(1f, 1f, 0f, 0.9f);
+        private static readonly Color ProbeColor = new Color(1f, 1f, 0f, 0.9f);
+        private static readonly Color GameHitboxColor = new Color(1f, 0.5f, 0f, 0.9f);
 
-        private LineRenderer headToHandLine;
+        private LineRenderer probeLine;
+        private LineRenderer gameLine;
 
         void Start()
         {
-            headToHandLine = CreateLine("KnifeHitboxHeadToHand", HeadToHandColor);
+            probeLine = CreateLine("KnifeSwingProbe", ProbeColor);
+            gameLine = CreateLine("KnifeGameHitbox", GameHitboxColor);
         }
 
         private LineRenderer CreateLine(string name, Color color)
@@ -50,8 +54,8 @@ namespace SubmersedVR
         {
             bool knifeHeld = Inventory.main != null && Inventory.main.GetHeldTool() is Knife;
             bool ready = Settings.IsDebugEnabled
-                && VRCameraRig.instance != null && VRCameraRig.instance.vrCamera != null
-                && VRCameraRig.instance.rightController != null
+                && VRCameraRig.instance != null && VRCameraRig.instance.rightController != null
+                && VRCameraRig.instance.laserPointer != null
                 && Player.main != null
                 && knifeHeld;
 
@@ -61,19 +65,31 @@ namespace SubmersedVR
 
             if (ready && Inventory.main.GetHeldTool() is Knife knife)
             {
-                Transform head = VRCameraRig.instance.vrCamera.transform;
                 Transform hand = VRCameraRig.instance.rightController.transform;
+                Vector3 aim = VRCameraRig.instance.laserPointer.transform.forward;
                 float length = Mathf.Max(knife.attackDist, SphereRadius * 2f);
+                float scale = Settings.KnifeProbeRadiusScale;
 
-                // Full trace length from the hand, along the head to hand direction,
-                // where the knife is held
-                Vector3 direction = Vector3.Normalize(hand.position - head.position);
-                var pts = new List<Vector3>(256);
-                BuildCapsuleWireframe(pts, hand.position + direction * (length * 0.5f), direction, length);
-                SetLine(headToHandLine, pts);
+                // A: the current probe (detection zone that triggers the attack)
+                var probePts = new List<Vector3>(256);
+                if (Settings.KnifeProbeShape == "Sphere")
+                {
+                    BuildSphereWireframe(probePts, hand.position, length * scale);
+                }
+                else
+                {
+                    BuildCapsuleWireframe(probePts, hand.position + aim * (length * 0.5f), aim, length, SphereRadius * scale);
+                }
+                SetLine(probeLine, probePts);
+
+                // B: the game's real hitbox (always the unscaled game geometry)
+                var gamePts = new List<Vector3>(256);
+                BuildCapsuleWireframe(gamePts, hand.position + aim * (length * 0.5f), aim, length, SphereRadius);
+                SetLine(gameLine, gamePts);
             }
 
-            headToHandLine.enabled = ready && visible;
+            probeLine.enabled = ready && visible;
+            gameLine.enabled = ready && visible;
         }
 
         private static void SetLine(LineRenderer line, List<Vector3> points)
@@ -87,12 +103,12 @@ namespace SubmersedVR
 
         // Wireframe of a capsule (cylinder + 2 hemispheres) matching the game's trace:
         // meridians around the axis plus a few cross-section rings.
-        private static void BuildCapsuleWireframe(List<Vector3> points, Vector3 center, Vector3 direction, float length)
+        private static void BuildCapsuleWireframe(List<Vector3> points, Vector3 center, Vector3 direction, float length, float radius)
         {
             Vector3 dir = direction.normalized;
             GetBasis(dir, out Vector3 u, out Vector3 v);
             float a = length * 0.5f;
-            float c = Mathf.Max(a - SphereRadius, 0f);
+            float c = Mathf.Max(a - radius, 0f);
 
             const int Meridians = 8;
             const int HemSamples = 6;
@@ -110,18 +126,18 @@ namespace SubmersedVR
                 for (int i = 1; i <= HemSamples; i++)
                 {
                     float phi = i * Mathf.PI * 0.5f / HemSamples;
-                    stroke.Add(center + dir * (-c - SphereRadius * Mathf.Cos(phi)) + radialDir * (SphereRadius * Mathf.Sin(phi)));
+                    stroke.Add(center + dir * (-c - radius * Mathf.Cos(phi)) + radialDir * (radius * Mathf.Sin(phi)));
                 }
                 // Cylinder
                 for (int i = 1; i <= CylSamples; i++)
                 {
-                    stroke.Add(center + dir * (-c + 2f * c * i / CylSamples) + radialDir * SphereRadius);
+                    stroke.Add(center + dir * (-c + 2f * c * i / CylSamples) + radialDir * radius);
                 }
                 // Top hemisphere
                 for (int i = 1; i <= HemSamples; i++)
                 {
                     float phi = i * Mathf.PI * 0.5f / HemSamples;
-                    stroke.Add(center + dir * (c + SphereRadius * Mathf.Cos(phi)) + radialDir * (SphereRadius * Mathf.Sin(phi)));
+                    stroke.Add(center + dir * (c + radius * Mathf.Cos(phi)) + radialDir * (radius * Mathf.Sin(phi)));
                 }
                 // Top pole
                 stroke.Add(center + dir * a);
@@ -137,7 +153,25 @@ namespace SubmersedVR
                 {
                     float theta = i * Mathf.PI * 2f / RingSegments;
                     Vector3 radialDir = u * Mathf.Cos(theta) + v * Mathf.Sin(theta);
-                    stroke.Add(center + dir * axial + radialDir * SphereRadius);
+                    stroke.Add(center + dir * axial + radialDir * radius);
+                }
+                AppendStroke(points, stroke);
+            }
+        }
+
+        // Wireframe of a sphere: three great circles
+        private static void BuildSphereWireframe(List<Vector3> points, Vector3 center, float radius)
+        {
+            const int Segments = 16;
+            var stroke = new List<Vector3>(Segments + 1);
+            foreach (Vector3 axis in new[] { Vector3.up, Vector3.right, Vector3.forward })
+            {
+                GetBasis(axis, out Vector3 u, out Vector3 v);
+                stroke.Clear();
+                for (int i = 0; i <= Segments; i++)
+                {
+                    float theta = i * Mathf.PI * 2f / Segments;
+                    stroke.Add(center + (u * Mathf.Cos(theta) + v * Mathf.Sin(theta)) * radius);
                 }
                 AppendStroke(points, stroke);
             }

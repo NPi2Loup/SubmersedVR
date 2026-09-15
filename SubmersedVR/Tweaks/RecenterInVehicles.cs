@@ -63,24 +63,4 @@ namespace SubmersedVR
         }
     }
 
-    /*
-    [HarmonyPatch(typeof(SeaMoth), nameof(SeaMoth.OnPlayerEntered))]
-    static class RecenterInSeamoth
-    {
-        public static void Postfix()
-        {
-            VRUtil.Recenter();
-        }
-    }
-
-    [HarmonyPatch(typeof(Exosuit), nameof(Exosuit.OnPlayerEntered))]
-    static class RecenterInExosuit
-    {
-        public static void Postfix()
-        {
-            VRUtil.Recenter();
-        }
-    }
-*/
-
 }

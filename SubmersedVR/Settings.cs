@@ -56,7 +56,8 @@ namespace SubmersedVR
         public static float PDAHandAngleZ = 0f;
         public static event FloatChanged PDAHandAngleChanged;
 
-        public static bool PhysicalKnifeSwing = true;
+        // Off by default: the standard trigger attack keeps working until opted in
+        public static bool PhysicalKnifeSwing = false;
         public static float KnifeSwingSpeedThreshold = 4.0f;
 
         //Ambient Occlusion Settings

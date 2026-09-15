@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using HarmonyLib;
 using UnityEngine;
 
@@ -16,7 +15,7 @@ namespace SubmersedVR
     /// big gesture "waits" for the target to come into the swing path. If the
     /// gesture ends without a target (speed drops or the window expires), a whiff
     /// is fired so the swing still gets its animation and sound.
-    /// While enabled, the trigger button is disabled for the knife so it stays free.
+    /// While enabled, the trigger button no longer attacks with the knife.
     /// </summary>
     public class PhysicalKnifeSwing : MonoBehaviour
     {
@@ -31,19 +30,19 @@ namespace SubmersedVR
         // above the threshold (no discrete gesture end)
         private const float FiredSafetyTimeout = 1.0f;
 
-        // Inflates the probe radius relative to the game's 0.2 m trace radius,
-        // to cover the gap between the controller position and the real trace
-        // origin. Shared with KnifeHitboxDebug.
+        // Inflates the probe radius relative to the game's trace radius, to cover
+        // the hand-to-aim offset and tracking noise. Shared with KnifeHitboxDebug.
         internal const float ProbeRadiusScale = 1.5f;
 
         // How long a swing stays armed waiting for a target before firing a whiff
-        internal const float SwingWindow = 0.2f;
+        private const float SwingWindow = 0.2f;
 
         // Scale haptic intensity by swing speed (clamped)
         private const float MaxHapticSpeed = 5.0f;
 
-        // Must match PlayerTool.TraceForTarget's default sphere radius
-        private const float TraceSphereRadius = 0.2f;
+        // Must match PlayerTool.TraceForTarget's default sphere radius.
+        // Shared with KnifeHitboxDebug.
+        internal const float TraceSphereRadius = 0.2f;
 
         // The probe hit list is reused across frames
         private static readonly RaycastHit[] capsuleHits = new RaycastHit[16];
@@ -121,9 +120,8 @@ namespace SubmersedVR
                 case SwingState.Armed:
                     // Fire as soon as a hittable target is in the probe hitbox,
                     // while the hand moves toward the aim (not on the pull-back)
-                    var rig = VRCameraRig.instance;
-                    bool movingTowardAim = rig == null || rig.laserPointer == null
-                        || Vector3.Dot(velocity, rig.laserPointer.transform.forward) > -0.2f;
+                    var aim = Aiming.GetAimTransform();
+                    bool movingTowardAim = aim == null || Vector3.Dot(velocity, aim.forward) > -0.2f;
                     if (movingTowardAim && ProbeHittableTarget(knife))
                     {
                         FireSwing(knife, speed);
@@ -157,18 +155,19 @@ namespace SubmersedVR
         // Probe: is there a valid knife target inside the current probe hitbox?
         // The capsule mirrors the game's own trace (0.2 m sphere radius swept for
         // the attack distance along the aim, inflated by the probe radius scale to
-        // cover the gap between the controller position and the real trace origin),
-        // so a trigger means the games trace will hit.
+        // cover the hand-to-aim offset and tracking noise), so a trigger means
+        // the game's trace will hit.
         static bool ProbeHittableTarget(Knife knife)
         {
             var rig = VRCameraRig.instance;
-            if (rig == null || rig.rightController == null || rig.laserPointer == null) return false;
+            var aim = Aiming.GetAimTransform();
+            if (rig == null || rig.rightController == null || aim == null) return false;
 
             Vector3 origin = rig.rightController.transform.position;
             float scale = ProbeRadiusScale;
             float length = Mathf.Max(knife.attackDist, TraceSphereRadius * 2f);
 
-            int count = Physics.SphereCastNonAlloc(origin, TraceSphereRadius * scale, rig.laserPointer.transform.forward, capsuleHits, length, ~0);
+            int count = Physics.SphereCastNonAlloc(origin, TraceSphereRadius * scale, aim.forward, capsuleHits, length, ~0);
             for (int i = 0; i < count; i++)
             {
                 if (IsHittable(capsuleHits[i].collider)) return true;
@@ -197,14 +196,20 @@ namespace SubmersedVR
         {
             LastSwingTime = Time.time;
 
-            // Get the GUIHand to pass to OnToolUseAnim
-            var guiHand = Player.main?.GetComponent<GUIHand>();
+            // Fire the knife attack directly. The flag guards the SuppressButtonKnifeAttack
+            // prefix; try/finally so an exception in the game code cannot leak it.
+            var guiHand = Player.main?.guiHand;
             if (guiHand == null) return;
 
-            // Fire the knife attack directly
             IsSwinging = true;
-            knife.OnToolUseAnim(guiHand);
-            IsSwinging = false;
+            try
+            {
+                knife.OnToolUseAnim(guiHand);
+            }
+            finally
+            {
+                IsSwinging = false;
+            }
 
             // Haptic feedback scaled by swing speed
             HapticsVR.PlayGameHaptics(HapticsVR.Controller.Right, 0.0f, 0.15f, 20f, Mathf.Clamp01(speed / MaxHapticSpeed));
@@ -247,18 +252,17 @@ namespace SubmersedVR
         }
     }
 
-    // Block OnRightHandDown so the trigger does nothing at all with the knife equipped.
-    // This prevents the attack animation from starting and frees the trigger for other uses.
+    // Block OnRightHandDown so the trigger does nothing at all with the knife
+    // equipped. This also prevents the attack animation from starting.
     [HarmonyPatch(typeof(PlayerTool), nameof(PlayerTool.OnRightHandDown))]
     static class SuppressKnifeTrigger
     {
         [HarmonyPrefix]
-        static bool Prefix(PlayerTool __instance, ref bool __result)
+        static bool Prefix(PlayerTool __instance)
         {
             if (!Settings.PhysicalKnifeSwing) return true;
             if (!(__instance is Knife)) return true;
 
-            __result = false;
             return false;
         }
     }

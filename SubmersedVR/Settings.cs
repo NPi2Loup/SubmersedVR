@@ -35,6 +35,8 @@ namespace SubmersedVR
         public static bool PutHandReticleOnLaserPointer;
         public static event BooleanChanged PutHandReticleOnLaserPointerChanged;
 
+        public static bool ReticleFaceFlip;
+
         public static bool PutBarsOnWrist;
         public static event BooleanChanged PutBarsOnWristChanged;
 
@@ -61,6 +63,7 @@ namespace SubmersedVR
         public static string KnifeProbeShape = "Capsule";
         public static float KnifeProbeRadiusScale = 1.0f;
         public static float KnifeSwingWindow = 0.5f;
+        public static float KnifeAttackDelay = 0.1f;
 
         //Ambient Occlusion Settings
         public static bool AOEnabled = true;
@@ -163,6 +166,7 @@ namespace SubmersedVR
 
             panel.AddHeading(tab, "Experimental");
             panel.AddToggleOption(tab, "Put hand reticle on laserpointer end", PutHandReticleOnLaserPointer, (value) => { PutHandReticleOnLaserPointer = value; PutHandReticleOnLaserPointerChanged(value); });
+            panel.AddToggleOption(tab, "Flip hand reticle face", ReticleFaceFlip, (value) => { ReticleFaceFlip = value; }, "Flip the hand reticle 180 degrees if its text is seen from behind.");
             panel.AddToggleOption(tab, "Invert Y Axis in Seamoth/Cameras", InvertYAxis, (value) => { InvertYAxis = value; InvertYAxisChanged(value); }, "Enables Y axis inversion for Seamoth and Cameras.");
             //panel.AddToggleOption(tab, "Enable Particle Fix", EnableParticleFix, (value) => { EnableParticleFix = value; }, "Enables Particle Optimizations.");
 
@@ -179,6 +183,7 @@ namespace SubmersedVR
             panel.AddChoiceOption<string>(tab, "Swing Probe Shape", new string[] { "Capsule", "Sphere" }, KnifeProbeShape, (value) => { KnifeProbeShape = value; }, "Shape of the swing detection zone. Capsule matches the games real hitbox, Sphere is a more lenient zone around the hand.");
             panel.AddSliderOption(tab, "Swing Probe Radius", KnifeProbeRadiusScale, 0.5f, 1.5f, KnifeProbeRadiusScale, 0.1f, (value) => { KnifeProbeRadiusScale = value; }, SliderLabelMode.Float, "0.0", "Inflates the swing detection radius (1.0 = the games 0.2 m trace radius).");
             panel.AddSliderOption(tab, "Swing Detection Window(s)", KnifeSwingWindow, 0.2f, 1.0f, KnifeSwingWindow, 0.1f, (value) => { KnifeSwingWindow = value; }, SliderLabelMode.Float, "0.0", "How long a swing stays armed waiting for a target before firing a whiff.");
+            panel.AddSliderOption(tab, "Knife Attack Delay(s)", KnifeAttackDelay, 0f, 0.3f, KnifeAttackDelay, 0.01f, (value) => { KnifeAttackDelay = value; }, SliderLabelMode.Float, "0.0", "Delay between the swing anim start and the games damage trace. The probe tests the predicted hand position at trace time. Calibrate from the [KnifeTrace] log lines.");
             panel.AddToggleOption(tab, "Always show controllers", AlwaysShowControllers, (value) => { AlwaysShowControllers = value; AlwaysShowControllersChanged(value); }, "Shows the controllers at all times.");
             //panel.AddToggleOption(tab, "Always show laserpointer", AlwaysShowLaserPointer, (value) => { AlwaysShowLaserPointer = value; AlwaysShowLaserPointerChanged(value); }, "Show the laserpointer at all times.");
 

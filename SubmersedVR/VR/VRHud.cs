@@ -66,10 +66,28 @@ namespace SubmersedVR
 
         public static void SetupHandReticleLaserPointer()
         {
-            var handReticle = HandReticle.main.gameObject.WithParent(VRCameraRig.instance.laserPointerUI.pointerDot.transform);
-            // Orientation is driven per-frame by ReticleBillboard (HMD upright), see SetupHandReticle
-            handReticle.transform.localPosition = new Vector3(0, -5, VRCameraRig.instance.laserPointerUI.pointerDot.transform.localPosition.z);//new Vector3(0, 0, 0.05f);
-            handReticle.transform.localScale = VRCameraRig.instance.laserPointerUI.pointerDot.transform.localScale * 2;//new Vector3(0.001f, 0.001f, 0.001f);
+            var rig = VRCameraRig.instance;
+            var dot = rig.laserPointerUI.pointerDot.transform;
+            // Establish the current size under the pointer dot first...
+            var handReticle = HandReticle.main.gameObject.WithParent(dot);
+            handReticle.transform.localPosition = new Vector3(0, -5, dot.localPosition.z);
+            handReticle.transform.localScale = dot.localScale * 2;
+            // ...then detach it from the pointer hierarchy (unknown, possibly
+            // non-uniform scale) and re-parent it directly under the UI camera,
+            // where per-frame orientation is exact (see ReticleBillboard)
+            Vector3 worldScale = handReticle.transform.lossyScale;
+            handReticle.WithParent(rig.uiCamera.transform);
+            var canvas = handReticle.GetComponent<Canvas>();
+            if (canvas == null)
+            {
+                canvas = handReticle.AddComponent<Canvas>();
+            }
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.worldCamera = rig.uiCamera;
+            handReticle.layer = LayerID.UI;
+            Vector3 camScale = rig.uiCamera.transform.lossyScale;
+            handReticle.transform.localScale = new Vector3(worldScale.x / camScale.x, worldScale.y / camScale.y, worldScale.z / camScale.z);
+            handReticle.transform.localRotation = Quaternion.identity;
         }
 
         public static void OnHandReticleSettingChanged(bool onLaserPointer)

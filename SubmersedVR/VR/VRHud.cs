@@ -44,12 +44,14 @@ namespace SubmersedVR
         {
             if (onLaserPointer)
             {
-                SetupHandReticleLaserPointer(uiCamera, rightControllerUI);
+                SetupHandReticleLaserPointer();
             }
             else
             {
                 SetupHandReticleOnHand(uiCamera, rightControllerUI);
             }
+            // Keep the reticle text upright (facing the HMD) in laser pointer mode only
+            HandReticle.main.gameObject.GetOrAddComponent<ReticleBillboard>().enabled = onLaserPointer;
         }
 
         public static void SetupHandReticleOnHand(Camera uiCamera, Transform rightControllerUI)
@@ -62,11 +64,10 @@ namespace SubmersedVR
             handReticle.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
         }
 
-        public static void SetupHandReticleLaserPointer(Camera uiCamera, Transform rightControllerUI)
+        public static void SetupHandReticleLaserPointer()
         {
             var handReticle = HandReticle.main.gameObject.WithParent(VRCameraRig.instance.laserPointerUI.pointerDot.transform);
-            handReticle.transform.LookAt(uiCamera.transform.position);
-            handReticle.transform.localRotation = Quaternion.Euler(40, 0, 0);
+            // Orientation is driven per-frame by ReticleBillboard (HMD upright), see SetupHandReticle
             handReticle.transform.localPosition = new Vector3(0, -5, VRCameraRig.instance.laserPointerUI.pointerDot.transform.localPosition.z);//new Vector3(0, 0, 0.05f);
             handReticle.transform.localScale = VRCameraRig.instance.laserPointerUI.pointerDot.transform.localScale * 2;//new Vector3(0.001f, 0.001f, 0.001f);
         }

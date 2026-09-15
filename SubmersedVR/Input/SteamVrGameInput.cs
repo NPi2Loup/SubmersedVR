@@ -83,10 +83,6 @@ namespace SubmersedVR
             {
                 __result |= ShoulderPDA.ConsumePendingPDAButtonPress();
             }
-            else if (ShoulderPDA.IsHandInPDAZone && (action == GameInput.Button.MoveDown || action == GameInput.Button.Sprint))
-            {
-                __result = false;
-            }
             return false;
         }
     }
@@ -119,10 +115,6 @@ namespace SubmersedVR
 
             String actionName = action.ToString();
             __result = SteamVR_Input.GetState(actionName, SteamVR_Input_Sources.Any);
-            if (ShoulderPDA.IsHandInPDAZone && (action == GameInput.Button.MoveDown || action == GameInput.Button.Sprint))
-            {
-                __result = false;
-            }
             return false;
         }
     }
@@ -184,7 +176,7 @@ namespace SubmersedVR
                     value = isPressed ? 1.0f : 0.0f;
                     break;
                 case GameInput.Button.MoveDown:
-                    isPressed = SteamVR_Actions.subnautica.MoveDown.GetState(SteamVR_Input_Sources.Any) && !ShoulderPDA.IsHandInPDAZone;
+                    isPressed = SteamVR_Actions.subnautica.MoveDown.GetState(SteamVR_Input_Sources.Any);
                     value = isPressed ? 1.0f : 0.0f;
                     break;
                 case GameInput.Button.LookUp:

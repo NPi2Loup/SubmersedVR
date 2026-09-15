@@ -38,7 +38,7 @@ namespace SubmersedVR
         public static bool PutBarsOnWrist;
         public static event BooleanChanged PutBarsOnWristChanged;
 
-        public static float VehicleRecenterDelay = 0.5f;
+        public static float VehicleRecenterDelay = 1.0f;
 
         public static bool AreGameHapticsEnabled = false;
         public static bool AreUIHapticsEnabled = false;
@@ -164,7 +164,7 @@ namespace SubmersedVR
             //panel.AddToggleOption(tab, "Enable Particle Fix", EnableParticleFix, (value) => { EnableParticleFix = value; }, "Enables Particle Optimizations.");
 
             panel.AddHeading(tab, "Vehicles");
-            panel.AddSliderOption(tab, "Vehicle Recenter Delay(s)", VehicleRecenterDelay, 0f, 1f, VehicleRecenterDelay, 0.1f, (value) => { VehicleRecenterDelay = value; }, SliderLabelMode.Float, "0.0", "Delay before the VR view is recentered after entering a vehicle, so you can straighten your head first.");
+            panel.AddSliderOption(tab, "Vehicle Recenter Delay(s)", VehicleRecenterDelay, 0f, 2f, VehicleRecenterDelay, 0.1f, (value) => { VehicleRecenterDelay = value; }, SliderLabelMode.Float, "0.0", "Delay before the VR view is recentered after entering a vehicle, so you can straighten your head first. 1s matches the vehicle entry transition.");
 
             panel.AddHeading(tab, "Hidden/Advanced VR Settings(Those can cause motion sickness!)");
             panel.AddToggleOption(tab, "Enable pitching(Looking Up/Down) while diving", !VROptions.disableInputPitch, (value) => { VROptions.disableInputPitch = !value; }, "This allows you to pitch up and down using the right thumbstick when diving. Can be very disorienting! I recommend to keep this disabled!");

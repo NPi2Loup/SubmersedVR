@@ -31,6 +31,14 @@ namespace SubmersedVR
         // above the threshold (no discrete gesture end)
         private const float FiredSafetyTimeout = 1.0f;
 
+        // Inflates the probe radius relative to the game's 0.2 m trace radius,
+        // to cover the gap between the controller position and the real trace
+        // origin. Shared with KnifeHitboxDebug.
+        internal const float ProbeRadiusScale = 1.5f;
+
+        // How long a swing stays armed waiting for a target before firing a whiff
+        internal const float SwingWindow = 0.2f;
+
         // Scale haptic intensity by swing speed (clamped)
         private const float MaxHapticSpeed = 5.0f;
 
@@ -124,7 +132,7 @@ namespace SubmersedVR
                     }
                     // The gesture ends without a target: speed drops back below
                     // the threshold, or the detection window expires -> whiff
-                    else if (!isAboveThreshold || Time.time - armTime >= Settings.KnifeSwingWindow)
+                    else if (!isAboveThreshold || Time.time - armTime >= SwingWindow)
                     {
                         FireSwing(knife, speed);
                         // Speed already dropped: the gesture is over, rearm right away
@@ -157,7 +165,7 @@ namespace SubmersedVR
             if (rig == null || rig.rightController == null || rig.laserPointer == null) return false;
 
             Vector3 origin = rig.rightController.transform.position;
-            float scale = Settings.KnifeProbeRadiusScale;
+            float scale = ProbeRadiusScale;
             float length = Mathf.Max(knife.attackDist, TraceSphereRadius * 2f);
 
             int count = Physics.SphereCastNonAlloc(origin, TraceSphereRadius * scale, rig.laserPointer.transform.forward, capsuleHits, length, ~0);

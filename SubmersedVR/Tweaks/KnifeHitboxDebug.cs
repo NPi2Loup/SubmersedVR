@@ -68,7 +68,7 @@ namespace SubmersedVR
                 Transform hand = VRCameraRig.instance.rightController.transform;
                 Vector3 aim = VRCameraRig.instance.laserPointer.transform.forward;
                 float length = Mathf.Max(knife.attackDist, SphereRadius * 2f);
-                float scale = Settings.KnifeProbeRadiusScale;
+                float scale = PhysicalKnifeSwing.ProbeRadiusScale;
 
                 // A: the current probe (detection zone that triggers the attack)
                 var probePts = new List<Vector3>(256);

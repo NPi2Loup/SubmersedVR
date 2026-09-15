@@ -10,16 +10,20 @@ namespace SubmersedVR
         void LateUpdate()
         {
             var rig = VRCameraRig.instance;
-            if (rig == null || rig.rigParentTarget == null)
+            if (rig == null || rig.uiCamera == null)
             {
                 return;
             }
-            var toHmd = rig.rigParentTarget.position - transform.position;
+            // The reticle lives in UI/tracking space (under uiRig at the tracking
+            // origin) while rigParentTarget is in game world space, so billboard
+            // against the UI camera, the HMD proxy in UI space
+            var hmd = rig.uiCamera.transform;
+            var toHmd = hmd.position - transform.position;
             if (toHmd.sqrMagnitude < 0.0001f)
             {
                 return;
             }
-            transform.rotation = Quaternion.LookRotation(toHmd, rig.rigParentTarget.up);
+            transform.rotation = Quaternion.LookRotation(toHmd, hmd.up);
         }
     }
 }

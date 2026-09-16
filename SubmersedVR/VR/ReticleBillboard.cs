@@ -72,7 +72,11 @@ namespace SubmersedVR
                     target.localPosition = transform.InverseTransformPoint(hit);
                     // Effective world scale TargetScale, relative to the root (AnchorScale)
                     target.localScale = new Vector3(TargetScale.x / AnchorScale.x, TargetScale.y / AnchorScale.y, TargetScale.z / AnchorScale.z);
-                    target.localRotation = Quaternion.identity;
+                    // Plane perpendicular to the hand laser (world up): the text
+                    // faces the player along the laser. It no longer follows the
+                    // head yaw; only the laser elevation (pitch) tilts it
+                    var worldRot = Quaternion.LookRotation(-laser.transform.forward, Vector3.up);
+                    target.localRotation = Quaternion.Inverse(transform.rotation) * worldRot;
                     target.gameObject.SetActive(true);
                 }
                 else

@@ -49,12 +49,12 @@ namespace SubmersedVR
             if (Settings.PDAReachZone == "Hip")
             {
                 zoneCenter = head.position + head.right * -0.20f + Vector3.down * 0.55f + head.forward * -0.05f;
-                zoneRadius = 0.18f;
+                zoneRadius = 0.09f;
             }
             else
             {
                 zoneCenter = head.position + head.right * -0.2f + Vector3.down * 0.2f + head.forward * -0.2f;
-                zoneRadius = 0.12f;
+                zoneRadius = 0.06f;
             }
 
             bool inZone = Vector3.Distance(rig.leftController.transform.position, zoneCenter) <= zoneRadius;

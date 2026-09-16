@@ -20,6 +20,8 @@ namespace SubmersedVR
             public Vector2 originalAnchorMax;
             public Vector2 originalPivot;
             public Vector2 originalAnchoredPos;
+            // Layout Y on the target canvas, re-applied by Enforce
+            public float splitY;
         }
 
         static GameObject targetCanvasGo;
@@ -30,6 +32,7 @@ namespace SubmersedVR
         public static void Split(Camera uiCamera)
         {
             Unsplit();
+            reparentLogCount = 0;
             if (HandReticle.main == null)
             {
                 return;
@@ -85,6 +88,7 @@ namespace SubmersedVR
                 originalAnchoredPos = rt.anchoredPosition,
             };
             rt.SetParent(targetCanvasGo.transform, false);
+            part.splitY = y;
             moved.Add(part);
             if (Settings.IsDebugEnabled)
             {
@@ -95,6 +99,42 @@ namespace SubmersedVR
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
             rt.pivot = new Vector2(0.5f, 0.5f);
             rt.anchoredPosition = new Vector2(0f, y);
+        }
+
+        // The game re-parents the primary action text to its icon every frame
+        // (icon-driven layout), undoing the one-shot Split. Called from
+        // ReticleBillboard.LateUpdate: if the game moved a part back, move it
+        // to the target canvas and re-apply the split layout.
+        static int reparentLogCount;
+
+        public static void Enforce()
+        {
+            if (targetCanvasGo == null)
+            {
+                return;
+            }
+            var target = targetCanvasGo.transform;
+            foreach (var part in moved)
+            {
+                if (part.rt == null)
+                {
+                    continue;
+                }
+                if (part.rt.parent == target)
+                {
+                    continue;
+                }
+                if (Settings.IsDebugEnabled && reparentLogCount < 10)
+                {
+                    reparentLogCount++;
+                    var gameParent = part.rt.parent != null ? part.rt.parent.name : "null";
+                    Mod.logger.LogInfo($"[ReticleSplit] Enforce: {part.rt.name} re-parented by game to {gameParent}, moving back to target");
+                }
+                part.rt.SetParent(target, false);
+                part.rt.anchorMin = part.rt.anchorMax = new Vector2(0.5f, 0.5f);
+                part.rt.pivot = new Vector2(0.5f, 0.5f);
+                part.rt.anchoredPosition = new Vector2(0f, part.splitY);
+            }
         }
 
         public static void Unsplit()

@@ -53,6 +53,10 @@ namespace SubmersedVR
             transform.localPosition = AnchorOffset;
             transform.localScale = AnchorScale;
 
+            // The game re-parents the primary action text to its icon every
+            // frame: enforce the split back onto the target canvas
+            ReticleSplit.Enforce();
+
             // Face the view plane: upright text, rolling 1:1 with the head,
             // without tilting when looking up/down
             transform.rotation = rig.uiCamera.transform.rotation;

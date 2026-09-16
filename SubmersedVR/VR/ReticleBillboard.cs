@@ -57,26 +57,33 @@ namespace SubmersedVR
             // frame: enforce the split back onto the target canvas
             ReticleSplit.Enforce();
 
-            // Face the view plane: upright text, rolling 1:1 with the head,
-            // without tilting when looking up/down
-            transform.rotation = rig.uiCamera.transform.rotation;
+            // Plane perpendicular to the hand laser (world up), like the
+            // original mod's laser mode: the hand texts stay parallel to the
+            // pointed text, without following the head yaw; facing the view
+            // when there is no laser
+            var laser = rig.laserPointerUI;
+            if (laser != null)
+            {
+                transform.rotation = Quaternion.LookRotation(laser.transform.forward, Vector3.up);
+            }
+            else
+            {
+                transform.rotation = rig.uiCamera.transform.rotation;
+            }
 
             // Project the split target-info canvas on the hit point while aiming
             var target = ReticleSplit.TargetCanvas;
             if (target != null)
             {
-                var laser = rig.laserPointerUI;
                 if (rig.HasWorldTarget() && laser != null)
                 {
                     Vector3 hit = laser.transform.position + laser.transform.forward * rig.worldTargetDistance;
                     target.localPosition = transform.InverseTransformPoint(hit);
                     // Effective world scale TargetScale, relative to the root (AnchorScale)
                     target.localScale = new Vector3(TargetScale.x / AnchorScale.x, TargetScale.y / AnchorScale.y, TargetScale.z / AnchorScale.z);
-                    // Plane perpendicular to the hand laser (world up), front
-                    // face towards the player: the text no longer follows the
-                    // head yaw; only the laser elevation (pitch) tilts it
-                    var worldRot = Quaternion.LookRotation(laser.transform.forward, Vector3.up);
-                    target.localRotation = Quaternion.Inverse(transform.rotation) * worldRot;
+                    // The root is already on the laser plane: the pointed text
+                    // is coplanar with the hand texts
+                    target.localRotation = Quaternion.identity;
                     target.gameObject.SetActive(true);
                 }
                 else

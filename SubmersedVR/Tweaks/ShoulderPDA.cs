@@ -17,7 +17,9 @@ namespace SubmersedVR
     /// </summary>
     public class ShoulderPDA : MonoBehaviour
     {
-        // Cooldown between PDA toggles to prevent rapid open/close
+        // Cooldown between PDA toggles to prevent rapid open/close. Uses unscaled
+        // time: with the "pause game when PDA open" option the scaled clock freezes
+        // while the PDA is open, which would make the close gesture wait forever
         private const float ToggleCooldown = 0.6f;
 
         private float lastToggleTime = -1f;
@@ -76,8 +78,8 @@ namespace SubmersedVR
 
             Mod.logger.LogInfo($"[ShoulderPDA] trigger in zone: state={pda?.state} isInUse={pda?.isInUse} isOpen={pda?.isOpen} freeToInteract={Player.main.IsFreeToInteract()}");
 
-            if (Time.time - lastToggleTime < ToggleCooldown) return;
-            lastToggleTime = Time.time;
+            if (Time.unscaledTime - lastToggleTime < ToggleCooldown) return;
+            lastToggleTime = Time.unscaledTime;
 
             if (pdaOpen)
             {

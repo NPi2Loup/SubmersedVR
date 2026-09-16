@@ -1,4 +1,5 @@
 using HarmonyLib;
+using UnityEngine;
 
 namespace SubmersedVR
 {
@@ -13,6 +14,18 @@ namespace SubmersedVR
         }
     }
 
+    // The game can reload the setting after the rig setup, so force it each frame while the option is on
+    class WalkBobEnforcer : MonoBehaviour
+    {
+        void Update()
+        {
+            if (Settings.DisableWalkBobbing)
+            {
+                MiscSettings.cameraBobbing = false;
+            }
+        }
+    }
+
     // The rig is set up after the game init, so re-apply the option there.
     [HarmonyPatch(typeof(VRCameraRig), nameof(VRCameraRig.SetupControllers))]
     static class WalkBobDisablerRigSetup
@@ -21,6 +34,8 @@ namespace SubmersedVR
         static void Postfix(VRCameraRig __instance)
         {
             WalkBobDisabler.Apply();
+            Mod.logger.LogInfo($"[WalkBob] applied cameraBobbing={MiscSettings.cameraBobbing}");
+            __instance.gameObject.GetOrAddComponent<WalkBobEnforcer>();
         }
     }
 }

@@ -56,13 +56,14 @@ namespace SubmersedVR
             if (camTransform == null) return;
             if (waveDuration <= 0f) return;
 
+            // Both ping entry points fire on the same ping: ignore the second
+            // (the check must precede Restore, which clears 'active')
+            if (active && Time.time - pingStartTime < 0.5f) return;
+
             if (active) Restore();
 
             var shader = AdditiveShader();
             if (shader == null) return;
-
-            // Both ping entry points fire on the same ping: ignore the second
-            if (active && Time.time - pingStartTime < 0.5f) return;
 
             var camPos = camTransform.position;
             var camForward = camTransform.forward;
@@ -78,6 +79,8 @@ namespace SubmersedVR
             var renderers = Object.FindObjectsOfType<Renderer>();
             foreach (var renderer in renderers)
             {
+                // UI renderers (HUD sonar) share sonar-named shaders: skip them
+                if (renderer is CanvasRenderer) continue;
                 var mat = renderer.sharedMaterial;
                 if (mat == null || mat.shader == null) continue;
                 if (mat.shader.name == null || mat.shader.name.ToLowerInvariant().IndexOf("sonar") < 0) continue;
@@ -110,7 +113,9 @@ namespace SubmersedVR
             ringGo = GameObject.CreatePrimitive(PrimitiveType.Quad);
             ringGo.name = "SonarPingRing";
             Object.Destroy(ringGo.GetComponent<Collider>());
-            ringGo.transform.position = position;
+            // Offset along the frozen forward so the ring clears the camera
+            // near plane (a quad exactly at the camera is clipped)
+            ringGo.transform.position = position + camForward * 1f;
             // Orientation frozen at ping time: the ring faces the camera rig
             // as it was when the ping fired, so it stays put in world space
             ringGo.transform.rotation = Quaternion.LookRotation(camForward, Vector3.up);

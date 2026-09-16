@@ -23,6 +23,8 @@ namespace SubmersedVR
         private static readonly Color FallbackPingColor = new Color(0.253f, 0.593f, 0.662f, 0.196f);
         private static readonly string[] AdditiveShaderNames =
         {
+            // Confirmed present in-game (used by the ObjectivePing FX)
+            "Legacy Shaders/Particles/Additive",
             "Particles/Additive",
             "Sprites/Default",
             "UWE/Standard",
@@ -44,7 +46,8 @@ namespace SubmersedVR
         static float ringBaseAlpha;
 
         static List<Renderer> swappedRenderers = new List<Renderer>();
-        static List<Material> originalMaterials = new List<Material>();
+        // Full material slot arrays, restored on ping end
+        static List<Material[]> originalMaterials = new List<Material[]>();
         static List<Material> gridMaterials = new List<Material>();
         static List<Color> gridBaseColors = new List<Color>();
 
@@ -73,30 +76,48 @@ namespace SubmersedVR
             gridMaterials.Clear();
             gridBaseColors.Clear();
 
-            // The renderers the ping paints: sonar-named shared materials
-            // near the ping origin
+            // The ping repaints the whole hologram subtree (e.g.
+            // SonarMap_Small): every eye-dependent material in it (the grid,
+            // the mini sub, the projector) would otherwise keep the per-eye
+            // phase. The first sonar-named material provides the ping color.
             Color pingColor = FallbackPingColor;
+            bool foundPingColor = false;
             var renderers = Object.FindObjectsOfType<Renderer>();
             foreach (var renderer in renderers)
             {
                 // UI renderers (HUD sonar) share sonar-named shaders: skip them
                 if (renderer is CanvasRenderer) continue;
-                var mat = renderer.sharedMaterial;
-                if (mat == null || mat.shader == null) continue;
-                if (mat.shader.name == null || mat.shader.name.ToLowerInvariant().IndexOf("sonar") < 0) continue;
                 if (Vector3.Distance(renderer.transform.position, camPos) >= SearchRadius) continue;
+                if (!IsHologramRenderer(renderer)) continue;
 
-                Color color = mat.HasProperty("_PingColor") ? mat.GetColor("_PingColor") : FallbackPingColor;
-                var newMat = new Material(shader);
-                newMat.mainTexture = GridTexture();
-                newMat.color = color;
+                var mats = renderer.sharedMaterials;
+                if (mats == null || mats.Length == 0) continue;
+
+                var newMats = new Material[mats.Length];
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    Color color = FallbackPingColor;
+                    if (mats[i] != null && mats[i].HasProperty("_PingColor"))
+                    {
+                        color = mats[i].GetColor("_PingColor");
+                        foundPingColor = true;
+                    }
+                    var newMat = new Material(shader);
+                    newMat.mainTexture = GridTexture();
+                    newMat.color = color;
+                    newMat.renderQueue = 3100;
+                    newMats[i] = newMat;
+                    gridMaterials.Add(newMat);
+                    gridBaseColors.Add(color);
+                }
+                pingColor = foundPingColor ? newMats[0].color : FallbackPingColor;
 
                 swappedRenderers.Add(renderer);
-                originalMaterials.Add(mat);
-                gridMaterials.Add(newMat);
-                gridBaseColors.Add(color);
-                if (gridMaterials.Count == 1) pingColor = color;
-                renderer.sharedMaterial = newMat;
+                originalMaterials.Add(mats);
+                renderer.sharedMaterials = newMats;
+
+                var parentName = renderer.transform.parent != null ? renderer.transform.parent.name : "?";
+                Mod.logger.LogInfo($"[SonarWorld] swap: {renderer.name} (parent={parentName}) {mats.Length} slot(s): {DescribeMats(mats)}");
             }
 
             CreateRing(camPos, camForward, shader, pingColor);
@@ -179,7 +200,7 @@ namespace SubmersedVR
                 var original = originalMaterials[i];
                 if (renderer != null && original != null)
                 {
-                    renderer.sharedMaterial = original;
+                    renderer.sharedMaterials = original;
                 }
             }
             for (int i = 0; i < gridMaterials.Count; i++)
@@ -206,6 +227,42 @@ namespace SubmersedVR
             active = false;
         }
 
+        // A renderer belongs to the sonar hologram if one of its few parent
+        // transforms is the hologram root (SonarMap_*), or as a fallback if a
+        // material uses a sonar-named shader (e.g. the grid pass)
+        static bool IsHologramRenderer(Renderer renderer)
+        {
+            var t = renderer.transform;
+            for (int i = 0; i < 3 && t != null; i++)
+            {
+                var n = t.name.ToLowerInvariant();
+                if (n.IndexOf("sonarmap") >= 0 || n.IndexOf("hologram") >= 0)
+                {
+                    return true;
+                }
+                t = t.parent;
+            }
+            foreach (var mat in renderer.sharedMaterials)
+            {
+                if (mat != null && mat.shader != null && mat.shader.name != null
+                    && mat.shader.name.ToLowerInvariant().IndexOf("sonar") >= 0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        static string DescribeMats(Material[] mats)
+        {
+            var parts = new List<string>(mats.Length);
+            foreach (var mat in mats)
+            {
+                parts.Add(mat != null && mat.shader != null ? mat.shader.name : "null");
+            }
+            return string.Join(", ", parts);
+        }
+
         // The additive shader is found once and cached: the first available
         // name wins. The error log marks a build where no usable shader was
         // found, in which case the ping visual is skipped (graceful)
@@ -230,22 +287,38 @@ namespace SubmersedVR
             return additiveShader;
         }
 
-        // 256x256 white grid on transparent, repeated: 2px lines every 16px,
-        // point-filtered. RGBA32 (not Alpha8): an alpha-only texture would
-        // sample as R in the additive shader and tint the grid red
+        // 512x512 grid on transparent, repeated: 1px minor lines every 32px,
+        // 2px major lines every 128px, bilinear-filtered (Point made the
+        // stretched texture read as blocky low-res in-game). RGBA32 (not
+        // Alpha8): an alpha-only texture would sample as R in the additive
+        // shader and tint the grid red
         static Texture2D GridTexture()
         {
             if (gridTexture != null) return gridTexture;
-            gridTexture = new Texture2D(256, 256, TextureFormat.RGBA32, false);
+            gridTexture = new Texture2D(512, 512, TextureFormat.RGBA32, false);
             gridTexture.name = "SonarGrid";
-            gridTexture.filterMode = FilterMode.Point;
+            gridTexture.filterMode = FilterMode.Bilinear;
             gridTexture.wrapMode = TextureWrapMode.Repeat;
-            for (int y = 0; y < 256; y++)
+            for (int y = 0; y < 512; y++)
             {
-                for (int x = 0; x < 256; x++)
+                for (int x = 0; x < 512; x++)
                 {
-                    bool line = x % 16 < 2 || y % 16 < 2;
-                    gridTexture.SetPixel(x, y, line ? Color.white : Color.clear);
+                    bool major = x % 128 < 2 || y % 128 < 2;
+                    bool minor = x % 32 == 0 || y % 32 == 0;
+                    Color c;
+                    if (major)
+                    {
+                        c = new Color(1f, 1f, 1f, 0.9f);
+                    }
+                    else if (minor)
+                    {
+                        c = new Color(1f, 1f, 1f, 0.45f);
+                    }
+                    else
+                    {
+                        c = Color.clear;
+                    }
+                    gridTexture.SetPixel(x, y, c);
                 }
             }
             gridTexture.Apply();

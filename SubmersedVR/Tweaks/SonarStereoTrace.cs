@@ -46,8 +46,6 @@ namespace SubmersedVR
         static HashSet<string> seen = new HashSet<string>();
         static int rescanFrame = -1;
         static int sampleFrame = -1;
-        // The wave duration of the last SonarScreenFX.Ping, forwarded to the fix
-        public static float LastWaveDuration = 5f;
 
         public static bool WindowOpen => windowActive && Time.time <= windowEnd;
 
@@ -438,7 +436,6 @@ namespace SubmersedVR
         static void Postfix()
         {
             SonarStereoTrace.OpenWindow("SNCameraRoot.SonarPing");
-            SonarWorldPing.Trigger(SonarStereoTrace.LastWaveDuration);
         }
     }
 
@@ -450,7 +447,6 @@ namespace SubmersedVR
         static void Postfix()
         {
             SonarStereoTrace.OpenWindow("CyclopsSonarButton.SonarPing");
-            SonarWorldPing.Trigger(SonarStereoTrace.LastWaveDuration);
         }
     }
 
@@ -498,7 +494,6 @@ namespace SubmersedVR
         [HarmonyPostfix]
         static void Postfix(SonarScreenFX __instance)
         {
-            SonarStereoTrace.LastWaveDuration = __instance.waveDuration;
             Mod.logger.LogInfo($"[SonarTrace] SonarScreenFX.Ping: pingDistance={__instance.pingDistance} waveDuration={__instance.waveDuration} shaderID={__instance.pingDistanceShaderID} material={__instance._material?.name} window={SonarStereoTrace.WindowOpen}");
             var go = __instance.gameObject;
             Mod.logger.LogInfo($"[SonarTrace] SonarScreenFX go={go.name} active={go.activeInHierarchy} pos={go.transform.position}");

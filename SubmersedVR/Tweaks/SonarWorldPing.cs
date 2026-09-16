@@ -37,6 +37,7 @@ namespace SubmersedVR
         static bool active;
         static float pingStartTime;
         static float duration;
+        internal static float waveDuration = 5f;
         static Vector3 origin;
         static GameObject ringGo;
         static Material ringMat;
@@ -47,7 +48,7 @@ namespace SubmersedVR
         static List<Material> gridMaterials = new List<Material>();
         static List<Color> gridBaseColors = new List<Color>();
 
-        public static void Trigger(float waveDuration)
+        public static void Trigger()
         {
             var root = SNCameraRoot.main;
             if (root == null || root.mainCam == null) return;
@@ -59,6 +60,9 @@ namespace SubmersedVR
 
             var shader = AdditiveShader();
             if (shader == null) return;
+
+            // Both ping entry points fire on the same ping: ignore the second
+            if (active && Time.time - pingStartTime < 0.5f) return;
 
             var camPos = camTransform.position;
             var camForward = camTransform.forward;
@@ -130,7 +134,7 @@ namespace SubmersedVR
 
             if (ringGo != null && ringMat != null)
             {
-                float s = MaxRadius * (t / duration);
+                float s = MaxRadius * 2f * (t / duration);
                 ringGo.transform.localScale = new Vector3(s, s, s);
                 var c = ringMat.color;
                 c.a = ringBaseAlpha * Mathf.Clamp01(1f - t / duration);
@@ -173,6 +177,17 @@ namespace SubmersedVR
                     renderer.sharedMaterial = original;
                 }
             }
+            for (int i = 0; i < gridMaterials.Count; i++)
+            {
+                if (gridMaterials[i] != null)
+                {
+                    Object.Destroy(gridMaterials[i]);
+                }
+            }
+            if (ringMat != null)
+            {
+                Object.Destroy(ringMat);
+            }
             swappedRenderers.Clear();
             originalMaterials.Clear();
             gridMaterials.Clear();
@@ -210,11 +225,13 @@ namespace SubmersedVR
             return additiveShader;
         }
 
-        // 256x256 alpha grid, repeated: 2px lines every 16px, point-filtered
+        // 256x256 white grid on transparent, repeated: 2px lines every 16px,
+        // point-filtered. RGBA32 (not Alpha8): an alpha-only texture would
+        // sample as R in the additive shader and tint the grid red
         static Texture2D GridTexture()
         {
             if (gridTexture != null) return gridTexture;
-            gridTexture = new Texture2D(256, 256, TextureFormat.Alpha8, false);
+            gridTexture = new Texture2D(256, 256, TextureFormat.RGBA32, false);
             gridTexture.name = "SonarGrid";
             gridTexture.filterMode = FilterMode.Point;
             gridTexture.wrapMode = TextureWrapMode.Repeat;
@@ -230,8 +247,9 @@ namespace SubmersedVR
             return gridTexture;
         }
 
-        // 256x256 white ring band centered at radius 112/128: alpha 1 on a
-        // ~8px band (108..116) with a smooth 2px falloff on each side
+        // 256x256 white ring band at the texture edge (radius ~124/128): the
+        // quad is scaled to 2x MaxRadius, so the visible ring reaches
+        // MaxRadius at the end of the wave
         static Texture2D RingTexture()
         {
             if (ringTexture != null) return ringTexture;
@@ -246,13 +264,13 @@ namespace SubmersedVR
                     float dy = y + 0.5f - center;
                     float d = Mathf.Sqrt(dx * dx + dy * dy);
                     float a = 1f;
-                    if (d < 108f)
+                    if (d < 121f)
                     {
-                        a = 1f - (108f - d) / 2f;
+                        a = 1f - (121f - d) / 2f;
                     }
-                    else if (d > 116f)
+                    else if (d > 127f)
                     {
-                        a = 1f - (d - 116f) / 2f;
+                        a = 1f - (d - 127f) / 2f;
                     }
                     a = Mathf.Clamp01(a);
                     a = a * a * (3f - 2f * a);
@@ -284,6 +302,42 @@ namespace SubmersedVR
         static void Postfix(VRCameraRig __instance)
         {
             __instance.gameObject.GetOrAddComponent<SonarWorldPingDriver>();
+        }
+    }
+
+    // Sonar ping entry points (shared Seamoth/Cyclops + Cyclops button); both
+    // fire on the same ping, Trigger has a cooldown guard
+    [HarmonyPatch(typeof(SNCameraRoot), nameof(SNCameraRoot.SonarPing))]
+    static class SonarWorldPingSNCameraRoot
+    {
+        [HarmonyPostfix]
+        static void Postfix()
+        {
+            SonarWorldPing.Trigger();
+        }
+    }
+
+    [HarmonyPatch(typeof(CyclopsSonarButton), nameof(CyclopsSonarButton.SonarPing))]
+    static class SonarWorldPingCyclopsButton
+    {
+        [HarmonyPostfix]
+        static void Postfix()
+        {
+            SonarWorldPing.Trigger();
+        }
+    }
+
+    // Capture the wave duration from the screen FX ping
+    [HarmonyPatch(typeof(SonarScreenFX), nameof(SonarScreenFX.Ping))]
+    static class SonarWorldPingWaveDuration
+    {
+        [HarmonyPostfix]
+        static void Postfix(SonarScreenFX __instance)
+        {
+            if (__instance.waveDuration > 0f)
+            {
+                SonarWorldPing.waveDuration = __instance.waveDuration;
+            }
         }
     }
 

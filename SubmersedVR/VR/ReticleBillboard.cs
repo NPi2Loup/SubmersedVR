@@ -18,8 +18,11 @@ namespace SubmersedVR
         internal static readonly Vector3 AnchorOffset = new Vector3(0f, 0f, 0.05f);
         internal static readonly Vector3 AnchorScale = new Vector3(0.001f, 0.001f, 0.001f);
 
-        // Scale while projected on the target (the original pointer dot reticle scale)
-        internal static readonly Vector3 TargetScale = new Vector3(0.06f, 0.06f, 0.06f);
+        // Scale while projected on the target. The original reticle was parented
+        // to the pointer dot (localScale 0.03) with a local scale of 0.06, giving
+        // an effective 0.0018; the reticle now hangs off the controller UI (scale
+        // 1.0), so use the effective value directly
+        internal static readonly Vector3 TargetScale = new Vector3(0.0018f, 0.0018f, 0.0018f);
 
         // Debug (Debug Overlays): last logged reticle texts
         static string lastHand;

@@ -2,13 +2,14 @@ using TMPro;
 using UnityEngine;
 namespace SubmersedVR
 {
-    // Keeps the hand reticle readable in laser pointer mode: anchored at the
-    // hand without a target, projected on the laser pointer hit point while
-    // aiming, and always facing the view (billboard). The billboard fixes the
-    // original tool-dependent orientation (e.g. the knife is stored about 90
-    // degrees turned in the hand, which rolled the reticle). The per-frame
-    // write must win against the game's own HandReticle.LateUpdate, hence
-    // DefaultExecutionOrder(1).
+    // Keeps the hand reticle readable in laser pointer mode. The root canvas
+    // (tool texts + icons) always stays anchored at the hand; the target
+    // texts/progress are split onto a second canvas (ReticleSplit) which is
+    // projected on the laser hit point while aiming. Both are billboarded to
+    // the view, which fixes the original tool-dependent orientation (e.g. the
+    // knife is stored about 90 degrees turned in the hand, which rolled the
+    // reticle). The per-frame write must win against the game's own
+    // HandReticle.LateUpdate, hence DefaultExecutionOrder(1).
     [DefaultExecutionOrder(1)]
     public class ReticleBillboard : MonoBehaviour
     {
@@ -40,23 +41,33 @@ namespace SubmersedVR
                 return;
             }
 
-            var laser = rig.laserPointerUI;
-            if (rig.HasWorldTarget() && laser != null)
-            {
-                // Project on the hit point, like the original pointer dot anchor
-                transform.position = laser.transform.position + laser.transform.forward * rig.worldTargetDistance;
-                transform.localScale = TargetScale;
-            }
-            else
-            {
-                // No (recent) target: stay at the hand
-                transform.localPosition = AnchorOffset;
-                transform.localScale = AnchorScale;
-            }
+            // The root always stays at the hand (tool texts + icons live there)
+            transform.localPosition = AnchorOffset;
+            transform.localScale = AnchorScale;
 
             // Face the view plane: upright text, rolling 1:1 with the head,
             // without tilting when looking up/down
             transform.rotation = rig.uiCamera.transform.rotation;
+
+            // Project the split target-info canvas on the hit point while aiming
+            var target = ReticleSplit.TargetCanvas;
+            if (target != null)
+            {
+                var laser = rig.laserPointerUI;
+                if (rig.HasWorldTarget() && laser != null)
+                {
+                    Vector3 hit = laser.transform.position + laser.transform.forward * rig.worldTargetDistance;
+                    target.localPosition = transform.InverseTransformPoint(hit);
+                    // Effective world scale TargetScale, relative to the root (AnchorScale)
+                    target.localScale = new Vector3(TargetScale.x / AnchorScale.x, TargetScale.y / AnchorScale.y, TargetScale.z / AnchorScale.z);
+                    target.localRotation = Quaternion.identity;
+                    target.gameObject.SetActive(true);
+                }
+                else
+                {
+                    target.gameObject.SetActive(false);
+                }
+            }
 
             LogTexts();
         }

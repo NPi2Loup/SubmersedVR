@@ -262,6 +262,12 @@ namespace SubmersedVR
         static CommandBuffer eraseBuffer;
         static Mesh eraseMesh;
         static Material eraseMaterial;
+        static string eraseShaderName;
+        // Per-eye rendering detection: the effect is called twice per frame
+        static int lastFrame;
+        static int callsThisFrame;
+        static bool perEyeDetected;
+        static bool pingDxLogged;
 
         [HarmonyPostfix]
         static void Postfix(RenderTexture source, RenderTexture destination)
@@ -271,9 +277,26 @@ namespace SubmersedVR
                 logged = true;
                 Mod.logger.LogInfo($"[SonarWorld] screen sonar FX: ping-only, eye={Settings.SonarPingEye}");
             }
+            int f = Time.frameCount;
+            if (f != lastFrame)
+            {
+                lastFrame = f;
+                callsThisFrame = 0;
+                pingDxLogged = false;
+            }
+            callsThisFrame++;
+            if (callsThisFrame >= 2)
+            {
+                perEyeDetected = true;
+            }
             if (source == null || destination == null)
             {
                 return;
+            }
+            if (SonarWorldPing.IsPinging && !pingDxLogged)
+            {
+                pingDxLogged = true;
+                Mod.logger.LogInfo($"[SonarWorld] fx RT: src={source.width}x{source.height} dst={destination.width}x{destination.height} calls/frame={callsThisFrame} perEye={perEyeDetected} eraseShader={eraseShaderName}");
             }
             if (!SonarWorldPing.IsPinging)
             {
@@ -285,8 +308,6 @@ namespace SubmersedVR
             {
                 return;
             }
-            // One eye: draw the clean source over the other half of the
-            // stereo frame (left eye = left half, right eye = right half)
             if (eraseMaterial == null)
             {
                 var shader = FindShader("Unlit/Texture", "Unlit/Transparent", "Sprites/Default");
@@ -296,13 +317,30 @@ namespace SubmersedVR
                     Mod.logger.LogInfo("[SonarWorld] one-eye erase unavailable (no blit shader), keeping both eyes");
                     return;
                 }
+                eraseShaderName = shader.name;
                 eraseMaterial = new Material(shader);
                 eraseMesh = BuildQuad();
                 eraseBuffer = new CommandBuffer();
             }
+            if (perEyeDetected)
+            {
+                // Per-eye calls: first call = left eye, second = right eye;
+                // erase the full frame of the eye that must not see it
+                bool eraseThis = callsThisFrame == (Settings.SonarPingEye == "Right Eye" ? 1 : 2);
+                if (eraseThis)
+                {
+                    Graphics.Blit(source, destination);
+                }
+                return;
+            }
+            // Single-pass stereo: draw the clean source over the other half
+            // of the stereo frame (left eye = left half, right eye = right
+            // half). The command buffer matrices default to identity view
+            // and projection
             eraseMaterial.mainTexture = source;
             float tx = Settings.SonarPingEye == "Right Eye" ? -0.5f : 0.5f;
             eraseBuffer.Clear();
+            eraseBuffer.SetViewProjectionMatrices(Matrix4x4.identity, Matrix4x4.identity);
             eraseBuffer.SetRenderTarget(destination);
             eraseBuffer.DrawMesh(eraseMesh, Matrix4x4.TRS(new Vector3(tx, 0f, 0f), Quaternion.identity, new Vector3(0.5f, 1f, 1f)), eraseMaterial);
             Graphics.ExecuteCommandBuffer(eraseBuffer);

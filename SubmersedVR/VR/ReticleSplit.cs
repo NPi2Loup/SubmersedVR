@@ -16,6 +16,9 @@ namespace SubmersedVR
             public Vector3 originalLocalPos;
             public Quaternion originalLocalRot;
             public Vector3 originalLocalScale;
+            public Vector2 originalAnchorMin;
+            public Vector2 originalAnchorMax;
+            public Vector2 originalPivot;
         }
 
         static GameObject targetCanvasGo;
@@ -81,6 +84,9 @@ namespace SubmersedVR
                 originalLocalPos = rt.localPosition,
                 originalLocalRot = rt.localRotation,
                 originalLocalScale = rt.localScale,
+                originalAnchorMin = rt.anchorMin,
+                originalAnchorMax = rt.anchorMax,
+                originalPivot = rt.pivot,
             };
             rt.SetParent(targetCanvasGo.transform, false);
             moved.Add(part);
@@ -103,6 +109,9 @@ namespace SubmersedVR
                 part.rt.localPosition = part.originalLocalPos;
                 part.rt.localRotation = part.originalLocalRot;
                 part.rt.localScale = part.originalLocalScale;
+                part.rt.anchorMin = part.originalAnchorMin;
+                part.rt.anchorMax = part.originalAnchorMax;
+                part.rt.pivot = part.originalPivot;
             }
             moved.Clear();
             if (targetCanvasGo != null)

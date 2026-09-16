@@ -38,6 +38,17 @@ namespace SubmersedVR
         static Material ringMat;
         static float ringBaseAlpha;
 
+        // True while the ping wave is running: the game's screen effect
+        // (red grid + object outlines, the actual sonar readout) is only
+        // allowed during the ping, not persistently between pings
+        internal static bool IsPinging
+        {
+            get
+            {
+                return hasPinged && Time.time - ringStartTime < duration;
+            }
+        }
+
         public static void Trigger()
         {
             if (Mod.quitting) return;
@@ -232,13 +243,14 @@ namespace SubmersedVR
         }
     }
 
-    // The game also draws the sonar grid + ping wave as a screen-space image
-    // effect (OnRenderImage, "Image Effects/Sonar") over the whole stereo
-    // frame. Its vanishing point sits at the frame center - between the two
-    // eyes - so each eye sees it offset: the "double grid that follows the
-    // head" artifact. Skip the effect (blit the image through) and let the
-    // world-anchored ring replace the ping wave; the 3D hologram meshes are
-    // untouched
+    // The game also draws the sonar grid + object outlines + ping wave as a
+    // screen-space image effect (OnRenderImage, "Image Effects/Sonar") over
+    // the whole stereo frame. Its vanishing point sits at the frame center -
+    // between the two eyes - so each eye sees it offset: the "double grid
+    // that follows the head" artifact. The effect is only kept during a ping
+    // (the red grid + object outlines ARE the sonar readout, they must stay);
+    // between pings it is skipped (blit the image through). The 3D hologram
+    // meshes (WBOIT) are untouched
     [HarmonyPatch(typeof(SonarScreenFX), nameof(SonarScreenFX.OnRenderImage))]
     static class SonarScreenFXBlock
     {
@@ -250,7 +262,11 @@ namespace SubmersedVR
             if (!logged)
             {
                 logged = true;
-                Mod.logger.LogInfo("[SonarWorld] screen sonar FX disabled in VR");
+                Mod.logger.LogInfo("[SonarWorld] screen sonar FX: disabled except during ping");
+            }
+            if (SonarWorldPing.IsPinging)
+            {
+                return true;
             }
             if (source != null && destination != null)
             {

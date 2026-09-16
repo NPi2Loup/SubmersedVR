@@ -354,9 +354,18 @@ namespace SubmersedVR
                                 if(Player.main._cinematicModeActive == false)  
                                 {
                                     Player.main.armsController.transform.position = SNCameraRoot.main.mainCamera.transform.position + (SNCameraRoot.main.mainCamera.transform.forward * zOffset) + new Vector3(0f, yOffset, 0f);
-                                    //Player.main.armsController.transform.position = MainCameraControl.main.transform.position + (MainCameraControl.main.transform.forward * zOffset) + new Vector3(0f, yOffset, 0f);
+                                    //Player.main.armsController.transform.position = MainCameraControl.main.transform.position + (MainCameraControl.main.mainCamera.transform.forward * zOffset) + new Vector3(0f, yOffset, 0f);
                                 }  
                 */
+            }
+
+            // HandReticle is recreated on save/level load, possibly after
+            // VRHud.Setup already ran (the split was then skipped): re-apply
+            // the laser pointer setup whenever a new reticle instance shows
+            if (Settings.PutHandReticleOnLaserPointer && HandReticle.main != null
+                && ReticleSplit.SplitRoot != HandReticle.main.transform)
+            {
+                VRHud.SetupHandReticle(true);
             }
         }
 

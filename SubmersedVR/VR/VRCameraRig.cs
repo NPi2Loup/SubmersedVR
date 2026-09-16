@@ -49,6 +49,9 @@ namespace SubmersedVR
         public GameObject worldTarget;
         public float worldTargetDistance;
         public Transform rigParentTarget;
+        float smoothedRigY = float.NaN;
+        float smoothedCamY = float.NaN;
+        int lastBobLogFrame = -1;
 
         public Camera UIControllerCamera
         {
@@ -343,8 +346,27 @@ namespace SubmersedVR
             // Right now if you move too far away from the center, you will rotate the camera with the center as a pivot.
             if (rigParentTarget != null)
             {
-                this.transform.SetPositionAndRotation(rigParentTarget.position, rigParentTarget.rotation);
+                Vector3 pos = rigParentTarget.position;
+                ApplyYSmoothing(ref pos.y, ref smoothedRigY);
+                this.transform.SetPositionAndRotation(pos, rigParentTarget.rotation);
+
+                // The stolen render camera can bob on its own transform (not only via the rig)
+                float camY = float.NaN;
+                if (vrCamera != null && vrCamera.transform.parent == transform)
+                {
+                    Vector3 cp = vrCamera.transform.position;
+                    ApplyYSmoothing(ref cp.y, ref smoothedCamY);
+                    vrCamera.transform.position = cp;
+                    camY = cp.y;
+                }
+
                 uiRig.transform.rotation = transform.rotation;
+
+                if (Settings.IsDebugEnabled && Time.frameCount - lastBobLogFrame >= 30)
+                {
+                    lastBobLogFrame = Time.frameCount;
+                    Mod.logger.LogInfo($"[WalkBob] rigY={pos.y:0.###} camY={camY:0.###}");
+                }
                 /*TODO
                                 RecenterBodyOnCameraOrientation(35f, 0.3f, 3.0f, 1.5f);  
 
@@ -357,6 +379,27 @@ namespace SubmersedVR
                                 }  
                 */
             }
+        }
+
+        // Exponential low-pass on a single Y value: strongly damps the 1-2 Hz
+        // walking step oscillation, slow vertical motions follow with a small lag
+        void ApplyYSmoothing(ref float y, ref float smoothed)
+        {
+            float s = Settings.VerticalSmoothing;
+            if (s <= 0f || float.IsNaN(smoothed))
+            {
+                smoothed = y;
+                return;
+            }
+            // Snap on teleports (vehicle enter, level load)
+            if (Mathf.Abs(y - smoothed) > 2f)
+            {
+                smoothed = y;
+                return;
+            }
+            float k = 1f - Mathf.Exp(-s * 15f * Time.deltaTime);
+            smoothed += (y - smoothed) * k;
+            y = smoothed;
         }
 
         void DebugRaycasts()

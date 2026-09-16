@@ -3,22 +3,23 @@ using UnityEngine;
 
 namespace SubmersedVR
 {
-    // Splits the hand reticle for laser pointer mode: the tool info (hand
-    // texts + icons) stays on the root canvas at the hand, while the target
-    // info (use texts + progress) is moved to a second world canvas that
-    // ReticleBillboard projects on the laser hit point.
+    // Splits the hand reticle for laser pointer mode: the target action
+    // (compTextHand/HandSubscript, e.g. "Climb the ladder [A]") moves to a
+    // second world canvas that ReticleBillboard projects on the laser hit
+    // point, while the tool info (use texts, energy, progress, icons) stays
+    // on the root canvas at the hand.
     static class ReticleSplit
     {
         class MovedPart
         {
             public RectTransform rt;
             public Transform originalParent;
-            public Vector3 originalLocalPos;
             public Quaternion originalLocalRot;
             public Vector3 originalLocalScale;
             public Vector2 originalAnchorMin;
             public Vector2 originalAnchorMax;
             public Vector2 originalPivot;
+            public Vector2 originalAnchoredPos;
         }
 
         static GameObject targetCanvasGo;
@@ -48,26 +49,21 @@ namespace SubmersedVR
             }
             targetCanvasGo.layer = root.gameObject.layer;
 
+            // No uGUI_CanvasScaler clone: the billboard drives the canvas
+            // transform, and a runtime clone would miss the prefab _anchor.
+            // Log the root's scaler (if any) to confirm in game
             var rootScaler = root.GetComponent<uGUI_CanvasScaler>();
-            if (rootScaler != null)
+            if (rootScaler != null && Settings.IsDebugEnabled)
             {
-                var scaler = targetCanvasGo.AddComponent<uGUI_CanvasScaler>();
-                scaler.referenceResolution = rootScaler.referenceResolution;
-                scaler.mode = rootScaler.mode;
-                scaler.vrMode = rootScaler.vrMode;
-                scaler.distance = rootScaler.distance;
-                scaler.scaleMode = rootScaler.scaleMode;
-                scaler.SetDirty();
-                if (Settings.IsDebugEnabled)
-                {
-                    Mod.logger.LogInfo($"[ReticleSplit] Root uGUI_CanvasScaler: refRes {rootScaler.referenceResolution} mode {rootScaler.mode} vrMode {rootScaler.vrMode}");
-                }
+                Mod.logger.LogInfo($"[ReticleSplit] Root uGUI_CanvasScaler: refRes {rootScaler.referenceResolution} mode {rootScaler.mode} vrMode {rootScaler.vrMode}");
             }
 
-            MovePart(HandReticle.main.compTextUse, 0f);
-            MovePart(HandReticle.main.compTextUseSubscript, -40f);
-            MovePart(HandReticle.main.progressImage, -80f);
-            MovePart(HandReticle.main.progressText, -100f);
+            // The primary action on the focused target (e.g. "Climb the ladder
+            // [A]") is the target info: it goes to the hit point. The tool info
+            // (use texts + energy + progress) stays on the hand canvas.
+            // Laid out above the laser dot at the hit point (to be tuned)
+            MovePart(HandReticle.main.compTextHand, 30f);
+            MovePart(HandReticle.main.compTextHandSubscript, -10f);
         }
 
         static void MovePart(Component comp, float y)
@@ -81,12 +77,12 @@ namespace SubmersedVR
             {
                 rt = rt,
                 originalParent = rt.parent,
-                originalLocalPos = rt.localPosition,
                 originalLocalRot = rt.localRotation,
                 originalLocalScale = rt.localScale,
                 originalAnchorMin = rt.anchorMin,
                 originalAnchorMax = rt.anchorMax,
                 originalPivot = rt.pivot,
+                originalAnchoredPos = rt.anchoredPosition,
             };
             rt.SetParent(targetCanvasGo.transform, false);
             moved.Add(part);
@@ -105,13 +101,20 @@ namespace SubmersedVR
         {
             foreach (var part in moved)
             {
+                // Destroyed objects (level load without unsplit) are skipped
+                if (part.rt == null || part.originalParent == null)
+                {
+                    continue;
+                }
                 part.rt.SetParent(part.originalParent, false);
-                part.rt.localPosition = part.originalLocalPos;
-                part.rt.localRotation = part.originalLocalRot;
-                part.rt.localScale = part.originalLocalScale;
+                // Anchors first: the anchored position only maps to the local
+                // position once the original anchors are back
                 part.rt.anchorMin = part.originalAnchorMin;
                 part.rt.anchorMax = part.originalAnchorMax;
                 part.rt.pivot = part.originalPivot;
+                part.rt.anchoredPosition = part.originalAnchoredPos;
+                part.rt.localRotation = part.originalLocalRot;
+                part.rt.localScale = part.originalLocalScale;
             }
             moved.Clear();
             if (targetCanvasGo != null)

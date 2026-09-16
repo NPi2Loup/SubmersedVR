@@ -61,7 +61,6 @@ namespace SubmersedVR
         public static float KnifeSwingSpeedThreshold = 4.0f;
 
         public static bool DisableWalkBobbing = true;
-        public static float VerticalSmoothing = 0.5f;
 
         //Ambient Occlusion Settings
         public static bool AOEnabled = true;
@@ -174,7 +173,7 @@ namespace SubmersedVR
             panel.AddToggleOption(tab, "Enable desktop cinematics", VROptions.enableCinematics, (value) => { VROptions.enableCinematics = value; }, "Enables the games cinematics. Warning! Those move around your head and can cause motion sickness!");
             panel.AddToggleOption(tab, "Skip intro", VROptions.skipIntro, (value) => { VROptions.skipIntro = value; }, "Skip the intro when starting a new game.");
             panel.AddToggleOption(tab, "Disable walk bobbing", DisableWalkBobbing, (value) => { DisableWalkBobbing = value; WalkBobDisabler.Apply(); }, "Disables the automatic vertical camera movement while walking (reduces VR motion sickness)");
-            panel.AddSliderOption(tab, "Smooth vertical movement", VerticalSmoothing, 0f, 1f, VerticalSmoothing, 0.05f, (value) => { VerticalSmoothing = value; }, SliderLabelMode.Float, "0.00", "Damps the vertical (Y) movement: the walking step bob on foot, the wave heave in vehicles (the vehicle follow stays glued, only the wave band is damped). 0 = off, 1 = strongest.");
+
 
             panel.AddHeading(tab, "Debug Options");
             panel.AddToggleOption(tab, "Debug Overlays", IsDebugEnabled, (value) => { IsDebugEnabled = value; IsDebugChanged(value); }, "Enables Debug Overlays and Logs.");

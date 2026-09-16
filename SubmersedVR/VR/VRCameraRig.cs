@@ -57,6 +57,8 @@ namespace SubmersedVR
         bool hasLastTargetPos;
         Vector3 lastTargetPos;
         int lastBobLogFrame = -1;
+        int bobBurstFrames;
+        int bobBurstCooldown;
 
         public Camera UIControllerCamera
         {
@@ -387,12 +389,41 @@ namespace SubmersedVR
 
                 uiRig.transform.rotation = transform.rotation;
 
-                if (Settings.IsDebugEnabled && Time.frameCount - lastBobLogFrame >= 30)
+                if (Settings.IsDebugEnabled)
                 {
-                    lastBobLogFrame = Time.frameCount;
-                    // rawY is the unsmoothed target: compare to rigY to
-                    // measure the actual damping in game
-                    Mod.logger.LogInfo($"[WalkBob] rawY={rigParentTarget.position.y:0.###} rigY={pos.y:0.###} camY={camY:0.###}");
+                    // Persistent offset between the raw target and the
+                    // smoothed rig Y is not explained by the low-pass
+                    // (50 ms time constant): capture a dense per-frame burst
+                    // of the smoothing state to find the mechanism in game
+                    bool burst = bobBurstFrames > 0;
+                    if (!burst && bobBurstCooldown <= 0 && !float.IsNaN(smoothedRigY)
+                        && Mathf.Abs(rigParentTarget.position.y - smoothedRigY) > 0.05f)
+                    {
+                        burst = true;
+                        bobBurstFrames = 120;
+                        Mod.logger.LogInfo($"[WalkBob] burst start, offset={rigParentTarget.position.y - smoothedRigY:0.###}");
+                    }
+                    if (burst)
+                    {
+                        bobBurstFrames--;
+                        if (bobBurstFrames == 0)
+                        {
+                            bobBurstCooldown = 600;
+                            Mod.logger.LogInfo("[WalkBob] burst end");
+                        }
+                        Mod.logger.LogInfo($"[WalkBob] s={Settings.VerticalSmoothing:0.##} rawY={rigParentTarget.position.y:0.###} smooth={smoothedRigY:0.###} camSmooth={smoothedCamY:0.###} ts={Time.timeScale:0.#} dt={Time.unscaledDeltaTime:0.###}");
+                    }
+                    else if (bobBurstCooldown > 0)
+                    {
+                        bobBurstCooldown--;
+                    }
+                    if (Time.frameCount - lastBobLogFrame >= 30)
+                    {
+                        lastBobLogFrame = Time.frameCount;
+                        // rawY is the unsmoothed target: compare to rigY to
+                        // measure the actual damping in game
+                        Mod.logger.LogInfo($"[WalkBob] s={Settings.VerticalSmoothing:0.##} rawY={rigParentTarget.position.y:0.###} rigY={pos.y:0.###} camY={camY:0.###}");
+                    }
                 }
                 /*TODO
                                 RecenterBodyOnCameraOrientation(35f, 0.3f, 3.0f, 1.5f);  
@@ -424,7 +455,9 @@ namespace SubmersedVR
                 smoothed = y;
                 return;
             }
-            float k = 1f - Mathf.Exp(-s * 40f * Time.deltaTime);
+            // Unscaled: Time.deltaTime is 0 while paused (PDA open), which
+            // would freeze the smoothing mid-offset
+            float k = 1f - Mathf.Exp(-s * 40f * Time.unscaledDeltaTime);
             smoothed += (y - smoothed) * k;
             y = smoothed;
         }

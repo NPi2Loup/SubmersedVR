@@ -53,15 +53,20 @@ namespace SubmersedVR
             transform.localPosition = AnchorOffset;
             transform.localScale = AnchorScale;
 
+            var laser = rig.laserPointerUI;
+            bool aiming = rig.HasWorldTarget() && laser != null;
+
             // The game re-parents the primary action text to its icon every
-            // frame: enforce the split back onto the target canvas
-            ReticleSplit.Enforce();
+            // frame: enforce the split back onto the target canvas while
+            // aiming; without a world target (e.g. build mode) the action
+            // texts must stay on the hand, otherwise the build info would
+            // be invisible
+            ReticleSplit.Enforce(aiming);
 
             // Plane perpendicular to the hand laser (world up), like the
             // original mod's laser mode: the hand texts stay parallel to the
             // pointed text, without following the head yaw; facing the view
             // when there is no laser
-            var laser = rig.laserPointerUI;
             if (laser != null)
             {
                 transform.rotation = Quaternion.LookRotation(laser.transform.forward, Vector3.up);
@@ -75,7 +80,7 @@ namespace SubmersedVR
             var target = ReticleSplit.TargetCanvas;
             if (target != null)
             {
-                if (rig.HasWorldTarget() && laser != null)
+                if (aiming)
                 {
                     Vector3 hit = laser.transform.position + laser.transform.forward * rig.worldTargetDistance;
                     target.localPosition = transform.InverseTransformPoint(hit);

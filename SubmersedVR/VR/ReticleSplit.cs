@@ -137,11 +137,13 @@ namespace SubmersedVR
 
         // The game re-parents the primary action text to its icon every frame
         // (icon-driven layout), undoing the one-shot Split. Called from
-        // ReticleBillboard.LateUpdate: if the game moved a part back, move it
-        // to the target canvas and re-apply the split layout.
+        // ReticleBillboard.LateUpdate: while aiming, a part moved back by the
+        // game goes to the target canvas with the split layout; without a
+        // world target (e.g. build mode) the parts live on the hand with the
+        // original layout, so the action info stays visible
         static int reparentLogCount;
 
-        public static void Enforce()
+        public static void Enforce(bool aiming)
         {
             if (targetCanvasGo == null)
             {
@@ -154,21 +156,48 @@ namespace SubmersedVR
                 {
                     continue;
                 }
-                if (part.rt.parent == target)
+                if (aiming)
                 {
-                    continue;
+                    if (part.rt.parent == target)
+                    {
+                        continue;
+                    }
+                    if (Settings.IsDebugEnabled && reparentLogCount < 10)
+                    {
+                        reparentLogCount++;
+                        var gameParent = part.rt.parent != null ? part.rt.parent.name : "null";
+                        Mod.logger.LogInfo($"[ReticleSplit] Enforce: {part.rt.name} re-parented by game to {gameParent}, moving back to target");
+                    }
+                    part.rt.SetParent(target, false);
+                    part.rt.anchorMin = part.rt.anchorMax = new Vector2(0.5f, 0.5f);
+                    part.rt.pivot = new Vector2(0.5f, 0.5f);
+                    part.rt.anchoredPosition = new Vector2(0f, part.splitY);
                 }
-                if (Settings.IsDebugEnabled && reparentLogCount < 10)
+                else if (part.rt.parent == target)
                 {
-                    reparentLogCount++;
-                    var gameParent = part.rt.parent != null ? part.rt.parent.name : "null";
-                    Mod.logger.LogInfo($"[ReticleSplit] Enforce: {part.rt.name} re-parented by game to {gameParent}, moving back to target");
+                    // Lost the target: back to the hand, original layout
+                    RestorePart(part);
                 }
-                part.rt.SetParent(target, false);
-                part.rt.anchorMin = part.rt.anchorMax = new Vector2(0.5f, 0.5f);
-                part.rt.pivot = new Vector2(0.5f, 0.5f);
-                part.rt.anchoredPosition = new Vector2(0f, part.splitY);
             }
+        }
+
+        // Puts a part back on its original parent with the original layout;
+        // the game re-lays it out (icon-driven) on the following frames
+        static void RestorePart(MovedPart part)
+        {
+            if (part.rt == null || part.originalParent == null)
+            {
+                return;
+            }
+            part.rt.SetParent(part.originalParent, false);
+            // Anchors first: the anchored position only maps to the local
+            // position once the original anchors are back
+            part.rt.anchorMin = part.originalAnchorMin;
+            part.rt.anchorMax = part.originalAnchorMax;
+            part.rt.pivot = part.originalPivot;
+            part.rt.anchoredPosition = part.originalAnchoredPos;
+            part.rt.localRotation = part.originalLocalRot;
+            part.rt.localScale = part.originalLocalScale;
         }
 
         public static void Unsplit()
@@ -176,19 +205,7 @@ namespace SubmersedVR
             foreach (var part in moved)
             {
                 // Destroyed objects (level load without unsplit) are skipped
-                if (part.rt == null || part.originalParent == null)
-                {
-                    continue;
-                }
-                part.rt.SetParent(part.originalParent, false);
-                // Anchors first: the anchored position only maps to the local
-                // position once the original anchors are back
-                part.rt.anchorMin = part.originalAnchorMin;
-                part.rt.anchorMax = part.originalAnchorMax;
-                part.rt.pivot = part.originalPivot;
-                part.rt.anchoredPosition = part.originalAnchoredPos;
-                part.rt.localRotation = part.originalLocalRot;
-                part.rt.localScale = part.originalLocalScale;
+                RestorePart(part);
             }
             moved.Clear();
             splitRoot = null;

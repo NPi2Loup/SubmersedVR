@@ -51,6 +51,8 @@ namespace SubmersedVR
         public Transform rigParentTarget;
         float smoothedRigY = float.NaN;
         float smoothedCamY = float.NaN;
+        bool hasLastTargetPos;
+        Vector3 lastTargetPos;
         int lastBobLogFrame = -1;
 
         public Camera UIControllerCamera
@@ -242,6 +244,9 @@ namespace SubmersedVR
             Vector3 oldPos = camera.transform.position;
             transform.position = oldPos;
             vrCamera.transform.parent = this.transform;
+            // Re-seed the vertical smoothing for the new camera/rig position
+            smoothedRigY = float.NaN;
+            smoothedCamY = float.NaN;
 
             AmbientOcclusionVR.AddOcclusionEffect(vrCamera);
         }
@@ -347,6 +352,15 @@ namespace SubmersedVR
             if (rigParentTarget != null)
             {
                 Vector3 pos = rigParentTarget.position;
+                // A large per-frame jump (teleport, vehicle enter) re-seeds
+                // the smoothing instead of gliding there
+                if (hasLastTargetPos && Vector3.Distance(pos, lastTargetPos) > 1f)
+                {
+                    smoothedRigY = float.NaN;
+                    smoothedCamY = float.NaN;
+                }
+                lastTargetPos = pos;
+                hasLastTargetPos = true;
                 ApplyYSmoothing(ref pos.y, ref smoothedRigY);
                 this.transform.SetPositionAndRotation(pos, rigParentTarget.rotation);
 
@@ -365,7 +379,9 @@ namespace SubmersedVR
                 if (Settings.IsDebugEnabled && Time.frameCount - lastBobLogFrame >= 30)
                 {
                     lastBobLogFrame = Time.frameCount;
-                    Mod.logger.LogInfo($"[WalkBob] rigY={pos.y:0.###} camY={camY:0.###}");
+                    // rawY is the unsmoothed target: compare to rigY to
+                    // measure the actual damping in game
+                    Mod.logger.LogInfo($"[WalkBob] rawY={rigParentTarget.position.y:0.###} rigY={pos.y:0.###} camY={camY:0.###}");
                 }
                 /*TODO
                                 RecenterBodyOnCameraOrientation(35f, 0.3f, 3.0f, 1.5f);  
@@ -397,7 +413,7 @@ namespace SubmersedVR
                 smoothed = y;
                 return;
             }
-            float k = 1f - Mathf.Exp(-s * 15f * Time.deltaTime);
+            float k = 1f - Mathf.Exp(-s * 40f * Time.deltaTime);
             smoothed += (y - smoothed) * k;
             y = smoothed;
         }

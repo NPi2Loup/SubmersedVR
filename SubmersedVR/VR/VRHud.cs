@@ -57,6 +57,7 @@ namespace SubmersedVR
 
         public static void SetupHandReticleOnHand()
         {
+            ReticleSplit.Unsplit();
             var rig = VRCameraRig.instance;
             // Steal Reticle and attach to the right hand
             var handReticle = HandReticle.main.gameObject.WithParent(rig.rightControllerUI.transform);
@@ -83,6 +84,7 @@ namespace SubmersedVR
             canvas.renderMode = RenderMode.WorldSpace;
             canvas.worldCamera = rig.uiCamera;
             handReticle.layer = LayerID.UI;
+            ReticleSplit.Split(rig.uiCamera);
         }
 
         public static void OnHandReticleSettingChanged(bool onLaserPointer)

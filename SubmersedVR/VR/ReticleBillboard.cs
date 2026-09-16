@@ -2,26 +2,23 @@ using TMPro;
 using UnityEngine;
 namespace SubmersedVR
 {
-    // Keeps the hand reticle readable in laser pointer mode. Without a target
-    // it stays at the hand; while aiming at a target it moves to the laser
-    // pointer's hit point (the original pointer dot anchor), so the target
-    // text is projected where the action happens. The rotation always faces
-    // the view (billboard), which fixes the original tool-dependent
-    // orientation (e.g. the knife is stored about 90 degrees turned in the
-    // hand, which rolled the reticle). The per-frame write wins against the
-    // game's own HandReticle.LateUpdate; DefaultExecutionOrder(1) guarantees
-    // we run after it.
+    // Keeps the hand reticle readable in laser pointer mode: anchored at the
+    // hand without a target, projected on the laser pointer hit point while
+    // aiming, and always facing the view (billboard). The billboard fixes the
+    // original tool-dependent orientation (e.g. the knife is stored about 90
+    // degrees turned in the hand, which rolled the reticle). The per-frame
+    // write must win against the game's own HandReticle.LateUpdate, hence
+    // DefaultExecutionOrder(1).
     [DefaultExecutionOrder(1)]
     public class ReticleBillboard : MonoBehaviour
     {
-        // Hand-mode anchor, shared with the reticle setups in VRHud
+        // Hand anchor, shared with the reticle setups in VRHud
         internal static readonly Vector3 AnchorOffset = new Vector3(0f, 0f, 0.05f);
         internal static readonly Vector3 AnchorScale = new Vector3(0.001f, 0.001f, 0.001f);
 
-        // Scale while projected on the target. The original reticle was parented
-        // to the pointer dot (localScale 0.03) with a local scale of 0.06, giving
-        // an effective 0.0018; the reticle now hangs off the controller UI (scale
-        // 1.0), so use the effective value directly
+        // Projected scale: the original reticle was parented to the pointer dot
+        // (localScale 0.03) with a local scale of 0.06, an effective 0.0018;
+        // it now hangs off the controller UI (scale 1.0)
         internal static readonly Vector3 TargetScale = new Vector3(0.0018f, 0.0018f, 0.0018f);
 
         // Debug (Debug Overlays): last logged reticle texts
@@ -64,8 +61,8 @@ namespace SubmersedVR
             LogTexts();
         }
 
-        // Logs the reticle's four text fields when they change, so the
-        // tool-info/target split can be worked out from the log
+        // Debug (Debug Overlays): logs the four text fields when they change;
+        // the hand/use mapping feeds the planned tool-info/target split
         void LogTexts()
         {
             if (!Settings.IsDebugEnabled) return;

@@ -43,6 +43,7 @@ namespace SubmersedVR
         public static bool ArticulatedHands = false;
         public static bool HandBasedTurning = false;
         public static bool LeftHandBasedTurning = false;
+        public static bool DisableWalkBobbing = true;
 
         //Ambient Occlusion Settings
         public static bool AOEnabled = true;
@@ -143,6 +144,7 @@ namespace SubmersedVR
             panel.AddToggleOption(tab, "Enable pitching(Looking Up/Down) while diving", !VROptions.disableInputPitch, (value) => { VROptions.disableInputPitch = !value; }, "This allows you to pitch up and down using the right thumbstick when diving. Can be very disorienting! I recommend to keep this disabled!");
             panel.AddToggleOption(tab, "Enable desktop cinematics", VROptions.enableCinematics, (value) => { VROptions.enableCinematics = value; }, "Enables the games cinematics. Warning! Those move around your head and can cause motion sickness!");
             panel.AddToggleOption(tab, "Skip intro", VROptions.skipIntro, (value) => { VROptions.skipIntro = value; }, "Skip the intro when starting a new game.");
+            panel.AddToggleOption(tab, "Disable walk bobbing", DisableWalkBobbing, (value) => { DisableWalkBobbing = value; WalkBobDisabler.Apply(); }, "Disables the automatic vertical camera movement while walking (reduces VR motion sickness)");
 
             panel.AddHeading(tab, "Debug Options");
             panel.AddToggleOption(tab, "Debug Overlays", IsDebugEnabled, (value) => { IsDebugEnabled = value; IsDebugChanged(value); }, "Enables Debug Overlays and Logs.");

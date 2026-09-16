@@ -3,10 +3,11 @@ using UnityEngine;
 
 namespace SubmersedVR
 {
-    // Splits the hand reticle for laser pointer mode: the tool info (hand
-    // texts + icons) stays on the root canvas at the hand, while the target
-    // info (use texts + progress) is moved to a second world canvas that
-    // ReticleBillboard projects on the laser hit point.
+    // Splits the hand reticle for laser pointer mode: the target action
+    // (compTextHand/HandSubscript, e.g. "Climb the ladder [A]") moves to a
+    // second world canvas that ReticleBillboard projects on the laser hit
+    // point, while the tool info (use texts, energy, progress, icons) stays
+    // on the root canvas at the hand.
     static class ReticleSplit
     {
         class MovedPart
@@ -64,10 +65,11 @@ namespace SubmersedVR
                 }
             }
 
-            MovePart(HandReticle.main.compTextUse, 0f);
-            MovePart(HandReticle.main.compTextUseSubscript, -40f);
-            MovePart(HandReticle.main.progressImage, -80f);
-            MovePart(HandReticle.main.progressText, -100f);
+            // The primary action on the focused target (e.g. "Climb the ladder
+            // [A]") is the target info: it goes to the hit point. The tool info
+            // (use texts + energy + progress) stays on the hand canvas.
+            MovePart(HandReticle.main.compTextHand, 0f);
+            MovePart(HandReticle.main.compTextHandSubscript, -40f);
         }
 
         static void MovePart(Component comp, float y)

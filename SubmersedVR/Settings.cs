@@ -146,7 +146,7 @@ namespace SubmersedVR
             panel.AddToggleOption(tab, "Enable desktop cinematics", VROptions.enableCinematics, (value) => { VROptions.enableCinematics = value; }, "Enables the games cinematics. Warning! Those move around your head and can cause motion sickness!");
             panel.AddToggleOption(tab, "Skip intro", VROptions.skipIntro, (value) => { VROptions.skipIntro = value; }, "Skip the intro when starting a new game.");
             panel.AddToggleOption(tab, "Disable walk bobbing", DisableWalkBobbing, (value) => { DisableWalkBobbing = value; WalkBobDisabler.Apply(); }, "Disables the automatic vertical camera movement while walking (reduces VR motion sickness)");
-            panel.AddSliderOption(tab, "Smooth vertical movement", VerticalSmoothing, 0f, 1f, VerticalSmoothing, 0.05f, (value) => { VerticalSmoothing = value; }, SliderLabelMode.Float, "0.00", "Smooths the vertical (Y) camera movement, strongly reducing the walking bob in VR. 0 = off, 1 = strongest smoothing. Slow vertical motions (swimming, vehicles) still follow with a small delay.");
+            panel.AddSliderOption(tab, "Smooth vertical movement", VerticalSmoothing, 0f, 1f, VerticalSmoothing, 0.05f, (value) => { VerticalSmoothing = value; }, SliderLabelMode.Float, "0.00", "Smooths the vertical (Y) movement, reducing the walking step bob and the vehicle wave heave. 0 = off, 1 = strongest smoothing (up to 0.6 s of vertical lag, 3x in vehicles). Slow vertical motion follows with the corresponding delay.");
 
             panel.AddHeading(tab, "Debug Options");
             panel.AddToggleOption(tab, "Debug Overlays", IsDebugEnabled, (value) => { IsDebugEnabled = value; IsDebugChanged(value); }, "Enables Debug Overlays and Logs.");

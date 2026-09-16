@@ -59,6 +59,12 @@ namespace SubmersedVR
         int lastBobLogFrame = -1;
         int bobBurstFrames;
         int bobBurstCooldown;
+        float lastRawY;
+        bool hasLastRawY;
+        // Vertical smoothing: the lag is VerticalSmoothing * MaxSmoothingLag
+        const float MaxSmoothingLag = 0.6f;
+        // In a vehicle the wave heave is the main discomfort: longer constant
+        const float VehicleSmoothingBoost = 3.3f;
 
         public Camera UIControllerCamera
         {
@@ -371,7 +377,14 @@ namespace SubmersedVR
                 {
                     smoothedRigY = float.NaN;
                     smoothedCamY = float.NaN;
+                    // Don't treat the teleport as fast motion
+                    hasLastRawY = false;
                 }
+                // Per-frame raw Y delta: bursts the trace on fast vertical
+                // motion (walking gait, vehicle heave) to capture its shape
+                bool fastMove = hasLastRawY && Mathf.Abs(pos.y - lastRawY) > 0.004f;
+                lastRawY = pos.y;
+                hasLastRawY = true;
                 lastTargetPos = pos;
                 hasLastTargetPos = true;
                 ApplyYSmoothing(ref pos.y, ref smoothedRigY);
@@ -391,17 +404,27 @@ namespace SubmersedVR
 
                 if (Settings.IsDebugEnabled)
                 {
-                    // Persistent offset between the raw target and the
-                    // smoothed rig Y is not explained by the low-pass
-                    // (50 ms time constant): capture a dense per-frame burst
-                    // of the smoothing state to find the mechanism in game
+                    // Dense per-frame burst of the smoothing state, on two
+                    // triggers: a persistent raw/smoothed offset (not
+                    // explained by the low-pass) or fast vertical motion
+                    // (walking gait / vehicle heave, to measure its shape)
                     bool burst = bobBurstFrames > 0;
-                    if (!burst && bobBurstCooldown <= 0 && !float.IsNaN(smoothedRigY)
-                        && Mathf.Abs(rigParentTarget.position.y - smoothedRigY) > 0.05f)
+                    if (!burst && bobBurstCooldown <= 0)
                     {
-                        burst = true;
-                        bobBurstFrames = 120;
-                        Mod.logger.LogInfo($"[WalkBob] burst start, offset={rigParentTarget.position.y - smoothedRigY:0.###}");
+                        bool offsetBurst = !float.IsNaN(smoothedRigY)
+                            && Mathf.Abs(rigParentTarget.position.y - smoothedRigY) > 0.05f;
+                        if (offsetBurst)
+                        {
+                            burst = true;
+                            bobBurstFrames = 120;
+                            Mod.logger.LogInfo($"[WalkBob] burst start (offset), offset={rigParentTarget.position.y - smoothedRigY:0.###}");
+                        }
+                        else if (fastMove)
+                        {
+                            burst = true;
+                            bobBurstFrames = 120;
+                            Mod.logger.LogInfo($"[WalkBob] burst start (fast move)");
+                        }
                     }
                     if (burst)
                     {
@@ -448,11 +471,19 @@ namespace SubmersedVR
             }
         }
 
-        // Exponential low-pass on a single Y value: strongly damps the 1-2 Hz
-        // walking step oscillation, slow vertical motions follow with a small lag
+        // Exponential low-pass on a single Y value. The lag is
+        // VerticalSmoothing * MaxSmoothingLag (0.6 s at 1), which strongly
+        // damps the ~2 Hz walking step and the vehicle wave heave; slow
+        // vertical motion follows with the corresponding lag
         void ApplyYSmoothing(ref float y, ref float smoothed)
         {
             float s = Settings.VerticalSmoothing;
+            // In a vehicle (PRAW, Seamoth, ...) the wave heave is the main
+            // discomfort: use a longer time constant there
+            if (Player.main != null && Player.main.currentMountedVehicle != null)
+            {
+                s *= VehicleSmoothingBoost;
+            }
             if (s <= 0f || float.IsNaN(smoothed))
             {
                 smoothed = y;
@@ -466,7 +497,7 @@ namespace SubmersedVR
             }
             // Unscaled: Time.deltaTime is 0 while paused (PDA open), which
             // would freeze the smoothing mid-offset
-            float k = 1f - Mathf.Exp(-s * 40f * Time.unscaledDeltaTime);
+            float k = 1f - Mathf.Exp(-Time.unscaledDeltaTime / (s * MaxSmoothingLag));
             smoothed += (y - smoothed) * k;
             y = smoothed;
         }

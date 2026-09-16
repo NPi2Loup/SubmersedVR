@@ -1,5 +1,6 @@
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace SubmersedVR
 {
@@ -243,36 +244,105 @@ namespace SubmersedVR
         }
     }
 
-    // The game also draws the sonar grid + object outlines + ping wave as a
+    // The game draws the sonar grid + object outlines + ping wave as a
     // screen-space image effect (OnRenderImage, "Image Effects/Sonar") over
     // the whole stereo frame. Its vanishing point sits at the frame center -
     // between the two eyes - so each eye sees it offset: the "double grid
-    // that follows the head" artifact. The effect is only kept during a ping
-    // (the red grid + object outlines ARE the sonar readout, they must stay);
-    // between pings it is skipped (blit the image through). The 3D hologram
-    // meshes (WBOIT) are untouched
+    // that follows the head" artifact. Postfix on the effect:
+    //  - between pings: the whole effect is erased (blit the clean image)
+    //  - during a ping: the effect is kept on ONE eye only (the clean right
+    //    half of the frame is blitted back over the effect), which removes
+    //    the double-grid artifact: the red grid + object outlines (the actual
+    //    sonar readout) stay, visible in the left eye
     [HarmonyPatch(typeof(SonarScreenFX), nameof(SonarScreenFX.OnRenderImage))]
     static class SonarScreenFXBlock
     {
         static bool logged;
+        static bool eraseFailed;
+        static CommandBuffer eraseBuffer;
+        static Mesh eraseMesh;
+        static Material eraseMaterial;
 
-        [HarmonyPrefix]
-        static bool Prefix(RenderTexture source, RenderTexture destination)
+        [HarmonyPostfix]
+        static void Postfix(RenderTexture source, RenderTexture destination)
         {
             if (!logged)
             {
                 logged = true;
-                Mod.logger.LogInfo("[SonarWorld] screen sonar FX: disabled except during ping");
+                Mod.logger.LogInfo($"[SonarWorld] screen sonar FX: ping-only, eye={Settings.SonarPingEye}");
             }
-            if (SonarWorldPing.IsPinging)
+            if (source == null || destination == null)
             {
-                return true;
+                return;
             }
-            if (source != null && destination != null)
+            if (!SonarWorldPing.IsPinging)
             {
                 Graphics.Blit(source, destination);
+                return;
             }
-            return false;
+            // Both eyes: keep the game's full (stereo-artifacted) display
+            if (Settings.SonarPingEye == "Both Eyes" || eraseFailed)
+            {
+                return;
+            }
+            // One eye: draw the clean source over the other half of the
+            // stereo frame (left eye = left half, right eye = right half)
+            if (eraseMaterial == null)
+            {
+                var shader = FindShader("Unlit/Texture", "Unlit/Transparent", "Sprites/Default");
+                if (shader == null)
+                {
+                    eraseFailed = true;
+                    Mod.logger.LogInfo("[SonarWorld] one-eye erase unavailable (no blit shader), keeping both eyes");
+                    return;
+                }
+                eraseMaterial = new Material(shader);
+                eraseMesh = BuildQuad();
+                eraseBuffer = new CommandBuffer();
+            }
+            eraseMaterial.mainTexture = source;
+            float tx = Settings.SonarPingEye == "Right Eye" ? -0.5f : 0.5f;
+            eraseBuffer.Clear();
+            eraseBuffer.SetRenderTarget(destination);
+            eraseBuffer.DrawMesh(eraseMesh, Matrix4x4.TRS(new Vector3(tx, 0f, 0f), Quaternion.identity, new Vector3(0.5f, 1f, 1f)), eraseMaterial);
+            Graphics.ExecuteCommandBuffer(eraseBuffer);
+        }
+
+        static Shader FindShader(params string[] names)
+        {
+            foreach (var name in names)
+            {
+                var found = Shader.Find(name);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+            return null;
+        }
+
+        // Full NDC quad: DrawMesh scales it to half width and offsets it to
+        // the half of the stereo frame that must be erased
+        static Mesh BuildQuad()
+        {
+            var m = new Mesh();
+            m.name = "SonarEraseQuad";
+            m.vertices = new Vector3[]
+            {
+                new Vector3(-1f, -1f, 0f),
+                new Vector3(1f, -1f, 0f),
+                new Vector3(1f, 1f, 0f),
+                new Vector3(-1f, 1f, 0f)
+            };
+            m.uv = new Vector2[]
+            {
+                new Vector2(0f, 0f),
+                new Vector2(1f, 0f),
+                new Vector2(1f, 1f),
+                new Vector2(0f, 1f)
+            };
+            m.triangles = new int[] { 0, 1, 2, 0, 2, 3 };
+            return m;
         }
     }
 

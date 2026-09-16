@@ -53,7 +53,6 @@ namespace SubmersedVR
         public float worldTargetTime;
         public Transform rigParentTarget;
         float smoothedRigY = float.NaN;
-        float smoothedCamY = float.NaN;
         bool hasLastTargetPos;
         Vector3 lastTargetPos;
         int lastBobLogFrame = -1;
@@ -61,10 +60,56 @@ namespace SubmersedVR
         int bobBurstCooldown;
         float lastRawY;
         bool hasLastRawY;
-        // Vertical smoothing: the lag is VerticalSmoothing * MaxSmoothingLag
+        bool wasInVehicle;
+        readonly NotchFilter vehicleWaveNotch = new NotchFilter();
+        // On foot: the smoothing lag is VerticalSmoothing * MaxSmoothingLag
         const float MaxSmoothingLag = 0.6f;
-        // In a vehicle the wave heave is the main discomfort: longer constant
-        const float VehicleSmoothingBoost = 3.3f;
+
+        // 2nd-order notch (biquad band-reject, RBJ form). The coefficients
+        // are re-derived each frame from the current dt (the VR render rate
+        // varies): the band around F0 is removed while DC/slow signals pass
+        // with ~zero lag - in a vehicle only the wave heave band is damped,
+        // the dive/terrain-follow trend stays glued
+        class NotchFilter
+        {
+            const float F0 = 0.4f;
+            const float Q = 1.8f;
+            float x1, x2, y1, y2;
+
+            public void Reset()
+            {
+                x1 = 0f;
+                x2 = 0f;
+                y1 = 0f;
+                y2 = 0f;
+            }
+
+            // Seed the state so the first frame has no transient
+            public void Seed(float x)
+            {
+                x1 = x;
+                x2 = x;
+                y1 = x;
+                y2 = x;
+            }
+
+            public float Process(float x, float dt)
+            {
+                if (dt <= 0f)
+                {
+                    return x;
+                }
+                float w0 = 2f * Mathf.PI * F0 * dt;
+                float c = Mathf.Cos(w0);
+                float a = Mathf.Sin(w0) / (2f * Q);
+                float y = (x - 2f * c * x1 + x2 + 2f * c * y1 - (1f - a) * y2) / (1f + a);
+                x2 = x1;
+                x1 = x;
+                y2 = y1;
+                y1 = y;
+                return y;
+            }
+        }
 
         public Camera UIControllerCamera
         {
@@ -265,7 +310,7 @@ namespace SubmersedVR
             vrCamera.transform.parent = this.transform;
             // Re-seed the vertical smoothing for the new camera/rig position
             smoothedRigY = float.NaN;
-            smoothedCamY = float.NaN;
+            vehicleWaveNotch.Reset();
 
             AmbientOcclusionVR.AddOcclusionEffect(vrCamera);
         }
@@ -376,9 +421,25 @@ namespace SubmersedVR
                 if (hasLastTargetPos && Vector3.Distance(pos, lastTargetPos) > 1f)
                 {
                     smoothedRigY = float.NaN;
-                    smoothedCamY = float.NaN;
+                    vehicleWaveNotch.Reset();
                     // Don't treat the teleport as fast motion
                     hasLastRawY = false;
+                }
+                // Vehicle enter/exit: reset and seed the notch on enter,
+                // re-seed the low-pass on exit
+                bool inVehicle = Player.main != null && Player.main.currentMountedVehicle != null;
+                if (inVehicle != wasInVehicle)
+                {
+                    wasInVehicle = inVehicle;
+                    vehicleWaveNotch.Reset();
+                    if (inVehicle)
+                    {
+                        vehicleWaveNotch.Seed(pos.y);
+                    }
+                    else
+                    {
+                        smoothedRigY = float.NaN;
+                    }
                 }
                 // Per-frame raw Y delta: bursts the trace on fast vertical
                 // motion (walking gait, vehicle heave) to capture its shape
@@ -387,17 +448,16 @@ namespace SubmersedVR
                 hasLastRawY = true;
                 lastTargetPos = pos;
                 hasLastTargetPos = true;
-                ApplyYSmoothing(ref pos.y, ref smoothedRigY);
+                ApplyYSmoothing(ref pos.y, inVehicle);
                 this.transform.SetPositionAndRotation(pos, rigParentTarget.rotation);
 
-                // The stolen render camera can bob on its own transform (not only via the rig)
+                // The render camera is not smoothed on its own: with
+                // cameraBobbing forced off it would only double the lag
+                // (the wave enters the view through the rig channel alone)
                 float camY = float.NaN;
                 if (vrCamera != null && vrCamera.transform.parent == transform)
                 {
-                    Vector3 cp = vrCamera.transform.position;
-                    ApplyYSmoothing(ref cp.y, ref smoothedCamY);
-                    vrCamera.transform.position = cp;
-                    camY = cp.y;
+                    camY = vrCamera.transform.position.y;
                 }
 
                 uiRig.transform.rotation = transform.rotation;
@@ -434,7 +494,7 @@ namespace SubmersedVR
                             bobBurstCooldown = 600;
                             Mod.logger.LogInfo("[WalkBob] burst end");
                         }
-                        Mod.logger.LogInfo($"[WalkBob] s={Settings.VerticalSmoothing:0.##} rawY={rigParentTarget.position.y:0.###} smooth={smoothedRigY:0.###} camSmooth={smoothedCamY:0.###} ts={Time.timeScale:0.#} dt={Time.unscaledDeltaTime:0.###}");
+                        Mod.logger.LogInfo($"[WalkBob] s={Settings.VerticalSmoothing:0.##} veh={(inVehicle ? 1 : 0)} rawY={rigParentTarget.position.y:0.###} smooth={smoothedRigY:0.###} ts={Time.timeScale:0.#} dt={Time.unscaledDeltaTime:0.###}");
                     }
                     else if (bobBurstCooldown > 0)
                     {
@@ -445,7 +505,7 @@ namespace SubmersedVR
                         lastBobLogFrame = Time.frameCount;
                         // rawY is the unsmoothed target: compare to rigY to
                         // measure the actual damping in game
-                        Mod.logger.LogInfo($"[WalkBob] s={Settings.VerticalSmoothing:0.##} rawY={rigParentTarget.position.y:0.###} rigY={pos.y:0.###} camY={camY:0.###}");
+                        Mod.logger.LogInfo($"[WalkBob] s={Settings.VerticalSmoothing:0.##} veh={(inVehicle ? 1 : 0)} rawY={rigParentTarget.position.y:0.###} rigY={pos.y:0.###} camY={camY:0.###}");
                     }
                 }
                 /*TODO
@@ -471,35 +531,40 @@ namespace SubmersedVR
             }
         }
 
-        // Exponential low-pass on a single Y value. The lag is
-        // VerticalSmoothing * MaxSmoothingLag (0.6 s at 1), which strongly
-        // damps the ~2 Hz walking step and the vehicle wave heave; slow
-        // vertical motion follows with the corresponding lag
-        void ApplyYSmoothing(ref float y, ref float smoothed)
+        // Damps the vertical movement. On foot: exponential low-pass, the
+        // lag is VerticalSmoothing * MaxSmoothingLag (damps the walking
+        // step). In a vehicle: a 2nd-order notch on the wave heave band
+        // (depth = the slider) - the vehicle's own motion (dive, terrain
+        // follow) passes with ~zero lag so the view stays glued to it
+        void ApplyYSmoothing(ref float y, bool inVehicle)
         {
             float s = Settings.VerticalSmoothing;
-            // In a vehicle (PRAW, Seamoth, ...) the wave heave is the main
-            // discomfort: use a longer time constant there
-            if (Player.main != null && Player.main.currentMountedVehicle != null)
+            if (s <= 0f)
             {
-                s *= VehicleSmoothingBoost;
-            }
-            if (s <= 0f || float.IsNaN(smoothed))
-            {
-                smoothed = y;
                 return;
             }
-            // Snap on teleports (vehicle enter, level load)
-            if (Mathf.Abs(y - smoothed) > 2f)
+            if (inVehicle)
             {
-                smoothed = y;
+                float notched = vehicleWaveNotch.Process(y, Time.unscaledDeltaTime);
+                y += s * (notched - y);
+                return;
+            }
+            if (float.IsNaN(smoothedRigY))
+            {
+                smoothedRigY = y;
+                return;
+            }
+            // Snap on teleports (level load)
+            if (Mathf.Abs(y - smoothedRigY) > 2f)
+            {
+                smoothedRigY = y;
                 return;
             }
             // Unscaled: Time.deltaTime is 0 while paused (PDA open), which
             // would freeze the smoothing mid-offset
             float k = 1f - Mathf.Exp(-Time.unscaledDeltaTime / (s * MaxSmoothingLag));
-            smoothed += (y - smoothed) * k;
-            y = smoothed;
+            smoothedRigY += (y - smoothedRigY) * k;
+            y = smoothedRigY;
         }
 
         void DebugRaycasts()

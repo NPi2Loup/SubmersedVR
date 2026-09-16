@@ -43,6 +43,17 @@ namespace SubmersedVR
             {
                 return;
             }
+            // On save/level load the reticle is recreated empty (texts and
+            // RectTransform sizes are zero): the game lays it out a few
+            // frames later. Splitting the zero state freezes a broken
+            // layout, so wait until the game has laid it out once (the
+            // VRCameraRig watchdog retries every frame)
+            var handText = HandReticle.main.compTextHand;
+            var handRt = handText != null ? handText.transform as RectTransform : null;
+            if (handRt != null && handRt.sizeDelta.x <= 0.5f && handRt.rect.width <= 0.5f)
+            {
+                return;
+            }
             var root = HandReticle.main.gameObject.transform;
             splitRoot = root;
             targetCanvasGo = new GameObject("TargetReticleCanvas", typeof(RectTransform));
@@ -68,12 +79,28 @@ namespace SubmersedVR
                 Mod.logger.LogInfo($"[ReticleSplit] Root uGUI_CanvasScaler: refRes {rootScaler.referenceResolution} mode {rootScaler.mode} vrMode {rootScaler.vrMode}");
             }
 
-            // The primary action on the focused target (e.g. "Climb the ladder
-            // [A]") is the target info: it goes to the hit point. The tool info
-            // (use texts + energy + progress) stays on the hand canvas.
-            // Laid out above the laser dot at the hit point (to be tuned)
-            MovePart(HandReticle.main.compTextHand, 30f);
-            MovePart(HandReticle.main.compTextHandSubscript, -10f);
+            // The primary action on the focused target (e.g. "Climb the
+            // ladder [A]") is the target info: it goes to the hit point,
+            // with its action icon and the repair progress donut (%). The
+            // tool info (use texts + energy) stays on the hand canvas.
+            // Laid out around the laser dot at the hit point (to be tuned)
+            var iconRt = HandReticle.main.iconCanvas;
+            MovePart(iconRt, -28f);
+            // The donut and % label: a child of the icon container follows
+            // the icon move, a sibling has to be moved on its own
+            foreach (var comp in new Component[] { HandReticle.main.progressImage, HandReticle.main.progressText })
+            {
+                if (comp == null)
+                {
+                    continue;
+                }
+                if (!comp.transform.IsChildOf(iconRt))
+                {
+                    MovePart(comp, -28f);
+                }
+            }
+            MovePart(HandReticle.main.compTextHand, 32f);
+            MovePart(HandReticle.main.compTextHandSubscript, 6f);
         }
 
         static void MovePart(Component comp, float y)

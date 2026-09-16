@@ -3,24 +3,22 @@
 #if SONAR_TRACE
 
 using System.Collections.Generic;
+using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
 
 namespace SubmersedVR
 {
-    // Diagnostic (temporary): find the sonar ping wave. The in-game symptom
-    // is a grid texture on object outlines whose anchoring follows the camera
-    // position, misaligned between the two stereo eyes. v8 hunts the shader
-    // that draws the grid: the re-scan (40 m) logs new objects and, above
-    // all, shader swaps on pre-existing objects (the wave paints existing
-    // geometry, it is not a spawned object), collects the materials of
-    // sonar-named shaders and dumps their property values (material and
-    // global uniforms) every 30 frames, to identify which uniform drives
-    // the grid and whether it tracks the camera. The v7 trace showed the
-    // SonarScreenFX material is null and the VFXScan/VFXScanning paths are
-    // never called (Seamoth or Cyclops). The v2 trace showed the eye
-    // matrices are static (identity, half-IPD offset) and MainCamera renders
-    // "Both".
+    // Diagnostic (temporary): find and fix the sonar grid stereo
+    // misalignment. The in-game symptom is a grid texture on object outlines
+    // that is not aligned between the two stereo eyes and follows the head.
+    // The v8 trace showed the grid is a WBOIT post pass overlay
+    // (VFXOverlayMaterial, composited per eye) whose material properties are
+    // static: the grid is driven in the shader, by the per-eye camera builtin
+    // (_WorldSpaceCameraPos). v10 hooks Material.onWillRender on the overlay
+    // materials: it logs the per-eye value (throttled) and forces a shared
+    // anchor (the rig pose) for both eyes, which should align the grid. The
+    // v8 shader swap/sonar material re-scan is kept as a fallback.
     // UnityEngine engine methods (Shader.SetGlobal*, Material.Set*) are native
     // with no managed body and cannot be patched with Harmony, so this trace
     // only patches game assembly methods.
@@ -46,6 +44,10 @@ namespace SubmersedVR
         static HashSet<string> seen = new HashSet<string>();
         static int rescanFrame = -1;
         static int sampleFrame = -1;
+        static List<OverlayEyeHook> overlayHooks = new List<OverlayEyeHook>();
+        static HashSet<Material> hookedMats = new HashSet<Material>();
+        static EventInfo onWillRenderEvent;
+        static bool onWillRenderChecked;
 
         public static bool WindowOpen => windowActive && Time.time <= windowEnd;
 
@@ -99,6 +101,28 @@ namespace SubmersedVR
             {
                 AddNamesToSeen(root.mainCam.transform);
             }
+            // The sonar grid is a WBOIT post pass overlay, composited per eye
+            var wboit = Object.FindObjectOfType<WBOIT>();
+            if (wboit != null)
+            {
+                var wboitCam = ReadField(wboit, "camera") as Camera;
+                var wboitMat = ReadField(wboit, "compositeMaterial") as Material;
+                Mod.logger.LogInfo($"[SonarTrace] WBOIT go={wboit.gameObject.name} active={wboit.gameObject.activeInHierarchy} cam={(wboitCam != null ? wboitCam.name : "<none>")} composite={(wboitMat != null ? wboitMat.name : "<none>")}");
+            }
+            else
+            {
+                Mod.logger.LogInfo("[SonarTrace] WBOIT=<none>");
+            }
+
+            // The WBOIT overlay materials: hook them to log the per-eye
+            // camera position and force a shared anchor for both eyes
+            foreach (var overlay in Object.FindObjectsOfType<VFXOverlayMaterial>())
+            {
+                var mat = overlay.material;
+                Mod.logger.LogInfo($"[SonarTrace] overlay go={overlay.gameObject.name} mat={(mat != null ? mat.name : "<none>")}");
+                HookOnWillRender(mat, new OverlayEyeHook());
+            }
+
             // Snapshot the shader of every renderer so the re-scans can log
             // the swap the ping performs on pre-existing objects: the wave is
             // painted on existing geometry, it is not a spawned object
@@ -288,6 +312,35 @@ namespace SubmersedVR
             catch { return Color.magenta; }
         }
 
+        static object ReadField(object o, string name)
+        {
+            var field = o.GetType().GetField(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            return field != null ? field.GetValue(o) : null;
+        }
+
+        // Material.onWillRender is not in the stubs the mod compiles against,
+        // so the event is looked up once at runtime. The hook objects are kept
+        // referenced so their delegates are not garbage collected
+        public static void HookOnWillRender(Material m, OverlayEyeHook hook)
+        {
+            if (m == null) return;
+            if (!hookedMats.Add(m)) return;
+            if (!onWillRenderChecked)
+            {
+                onWillRenderChecked = true;
+                onWillRenderEvent = typeof(Material).GetEvent("onWillRender");
+                if (onWillRenderEvent == null)
+                {
+                    Mod.logger.LogError("[SonarTrace] Material.onWillRender missing from the runtime - overlay hooks disabled");
+                    hookedMats.Clear();
+                    return;
+                }
+            }
+            overlayHooks.Add(hook);
+            var method = typeof(OverlayEyeHook).GetMethod("OnWillRender");
+            onWillRenderEvent.AddEventHandler(m, System.Delegate.CreateDelegate(onWillRenderEvent.EventHandlerType, hook, method));
+        }
+
         // Sample the candidate positions and the screen FX material values
         // during the window. The offset relative to the VR camera is the
         // discriminator: constant while the head moves = camera-anchored
@@ -463,6 +516,21 @@ namespace SubmersedVR
         }
     }
 
+    // WBOIT overlay application: the ping applies the sonar material here
+    // (possibly as a fresh instance). Logged unconditionally, like the other
+    // VFX markers; the effective material is hooked for the per-eye trace
+    [HarmonyPatch(typeof(VFXOverlayMaterial), nameof(VFXOverlayMaterial.ApplyOverlay))]
+    static class SonarTraceOverlayApply
+    {
+        [HarmonyPostfix]
+        static void Postfix(VFXOverlayMaterial __instance, Material mat, string debugName)
+        {
+            var effective = __instance.material;
+            Mod.logger.LogInfo($"[SonarTrace] overlay applied: mat={(effective != null ? effective.name : (mat != null ? mat.name : "<none>"))} debugName={debugName} window={SonarStereoTrace.WindowOpen}");
+            SonarStereoTrace.HookOnWillRender(effective, new OverlayEyeHook());
+        }
+    }
+
     // Screen-space sonar ping FX. Logged unconditionally (not only during an
     // open window) so a call outside the ping window is still visible in the
     // log. Also logs the component context and the material property values:
@@ -483,6 +551,37 @@ namespace SubmersedVR
     }
 
     #endregion
+
+    // Hooked into the WBOIT overlay materials via Material.onWillRender: the
+    // grid is composited per eye, and its phase follows the per-eye camera
+    // position (the builtin _WorldSpaceCameraPos). The hook logs the per-eye
+    // value (throttled, during a ping window) and forces a shared anchor (the
+    // rig pose) so both eyes render the grid identically
+    class OverlayEyeHook
+    {
+        readonly HashSet<string> loggedEyes = new HashSet<string>();
+        int lastFrame = -1;
+
+        // Called by Unity per camera, just before the material is drawn
+        public void OnWillRender(Material m)
+        {
+            var current = Camera.current;
+            if (SonarStereoTrace.WindowOpen && current != null)
+            {
+                string eye = current.stereoTargetEye.ToString();
+                if (loggedEyes.Add(eye) || Time.frameCount - lastFrame >= 30)
+                {
+                    lastFrame = Time.frameCount;
+                    SonarStereoTrace.Log($"willrender {m.name} eye={eye} worldCamPos={m.GetVector("_WorldSpaceCameraPos")}");
+                }
+            }
+            var root = SNCameraRoot.main;
+            if (root != null && root.mainCam != null)
+            {
+                m.SetVector("_WorldSpaceCameraPos", root.mainCam.transform.position);
+            }
+        }
+    }
 }
 
 #endif

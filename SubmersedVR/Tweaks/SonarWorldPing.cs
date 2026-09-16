@@ -232,6 +232,34 @@ namespace SubmersedVR
         }
     }
 
+    // The game also draws the sonar grid + ping wave as a screen-space image
+    // effect (OnRenderImage, "Image Effects/Sonar") over the whole stereo
+    // frame. Its vanishing point sits at the frame center - between the two
+    // eyes - so each eye sees it offset: the "double grid that follows the
+    // head" artifact. Skip the effect (blit the image through) and let the
+    // world-anchored ring replace the ping wave; the 3D hologram meshes are
+    // untouched
+    [HarmonyPatch(typeof(SonarScreenFX), nameof(SonarScreenFX.OnRenderImage))]
+    static class SonarScreenFXBlock
+    {
+        static bool logged;
+
+        [HarmonyPrefix]
+        static bool Prefix(RenderTexture source, RenderTexture destination)
+        {
+            if (!logged)
+            {
+                logged = true;
+                Mod.logger.LogInfo("[SonarWorld] screen sonar FX disabled in VR");
+            }
+            if (source != null && destination != null)
+            {
+                Graphics.Blit(source, destination);
+            }
+            return false;
+        }
+    }
+
     // Drives the world-anchored ping visual at the Update cadence
     class SonarWorldPingDriver : MonoBehaviour
     {

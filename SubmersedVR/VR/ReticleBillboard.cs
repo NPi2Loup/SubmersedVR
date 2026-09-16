@@ -3,9 +3,10 @@ using UnityEngine;
 namespace SubmersedVR
 {
     // Keeps the hand reticle readable in laser pointer mode. The root canvas
-    // (tool texts + icons) always stays anchored at the hand; the target
-    // texts/progress are split onto a second canvas (ReticleSplit) which is
-    // projected on the laser hit point while aiming. Both are billboarded to
+    // (tool texts + energy + progress + icons) always stays anchored at the
+    // hand; the target action text is split onto a second canvas
+    // (ReticleSplit) which is projected on the laser hit point while aiming.
+    // Both are billboarded to
     // the view, which fixes the original tool-dependent orientation (e.g. the
     // knife is stored about 90 degrees turned in the hand, which rolled the
     // reticle). The per-frame write must win against the game's own
@@ -38,6 +39,13 @@ namespace SubmersedVR
             var anchor = rig.rightControllerUI.transform;
             if (transform.parent != anchor)
             {
+                // Not anchored at the hand anymore: hide the split target so it
+                // does not freeze at the last hit point
+                var frozenTarget = ReticleSplit.TargetCanvas;
+                if (frozenTarget != null)
+                {
+                    frozenTarget.gameObject.SetActive(false);
+                }
                 return;
             }
 

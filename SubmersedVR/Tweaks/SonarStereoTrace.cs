@@ -12,13 +12,17 @@ namespace SubmersedVR
     // Diagnostic (temporary): find and fix the sonar grid stereo
     // misalignment. The in-game symptom is a grid texture on object outlines
     // that is not aligned between the two stereo eyes and follows the head.
-    // The v8 trace showed the grid is a WBOIT post pass overlay
-    // (VFXOverlayMaterial, composited per eye) whose material properties are
-    // static: the grid is driven in the shader, by the per-eye camera builtin
-    // (_WorldSpaceCameraPos). v10 hooks Material.onWillRender on the overlay
-    // materials: it logs the per-eye value (throttled) and forces a shared
-    // anchor (the rig pose) for both eyes, which should align the grid. The
-    // v8 shader swap/sonar material re-scan is kept as a fallback.
+    // The v8/v9 traces showed the grid is a regular renderer (SonarBase,
+    // shader FX/WBOIT-CyclopsSonar) with static material properties: the grid
+    // is driven in the shader, by per-eye values (camera builtin or WBOIT
+    // pass globals). v10 hooked Material.onWillRender on the WBOIT overlay
+    // materials, but VFXOverlayMaterial is never called in-game (v20 log:
+    // zero overlay/willrender lines), so the fix never applied. v11 hooks
+    // the materials the re-scan actually finds (sonar-named shaders), forces
+    // the camera anchor to the ping origin (frozen at trigger time, so the
+    // grid stops sliding with the head and both eyes share it), logs the
+    // per-eye _WorldSpaceCameraPos/_ProjectionParams, and dumps the WBOIT
+    // pass globals per eye to find any second per-eye driver.
     // UnityEngine engine methods (Shader.SetGlobal*, Material.Set*) are native
     // with no managed body and cannot be patched with Harmony, so this trace
     // only patches game assembly methods.
@@ -51,6 +55,9 @@ namespace SubmersedVR
 
         public static bool WindowOpen => windowActive && Time.time <= windowEnd;
 
+        // The camera position at the last ping trigger: the shared anchor
+        public static Vector3 Origin => origin;
+
         public static void OpenWindow(string source)
         {
             if (WindowOpen) return;
@@ -64,6 +71,7 @@ namespace SubmersedVR
             sampleFrame = -1;
             fxMaterial = null;
             SonarTraceEyeLogger.ResetSeen();
+            SonarTraceWBOITGlobals.ResetSeen();
             Mod.logger.LogInfo($"[SonarTrace] ping ({source}) - log window open for {WindowDuration}s");
 
             var root = SNCameraRoot.main;
@@ -209,6 +217,9 @@ namespace SubmersedVR
                     if (mat != null && !sonarMats.Contains(mat))
                     {
                         sonarMats.Add(mat);
+                        // The grid material: hook it to log the per-eye camera
+                        // values and force the shared anchor for both eyes
+                        HookOnWillRender(mat, new OverlayEyeHook());
                     }
                 }
 
@@ -294,25 +305,25 @@ namespace SubmersedVR
             }
         }
 
-        static float GlobalFloat(string name)
+        public static float GlobalFloat(string name)
         {
             try { return Shader.GetGlobalFloat(name); }
             catch { return -12345f; }
         }
 
-        static Vector4 GlobalVector(string name)
+        public static Vector4 GlobalVector(string name)
         {
             try { return Shader.GetGlobalVector(name); }
             catch { return new Vector4(-12345f, -12345f, -12345f, -12345f); }
         }
 
-        static Color GlobalColor(string name)
+        public static Color GlobalColor(string name)
         {
             try { return Shader.GetGlobalColor(name); }
             catch { return Color.magenta; }
         }
 
-        static object ReadField(object o, string name)
+        public static object ReadField(object o, string name)
         {
             var field = o.GetType().GetField(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             return field != null ? field.GetValue(o) : null;
@@ -531,6 +542,52 @@ namespace SubmersedVR
         }
     }
 
+    // The WBOIT pass sets global shader parameters before rendering each
+    // camera (in VR, each eye). If the sonar shader reads one of them for the
+    // grid phase, the per-eye values explain the misalignment. Dumped once
+    // per eye per ping window, using the composite shader's property names as
+    // the global list
+    [HarmonyPatch(typeof(WBOIT), nameof(WBOIT.UpdateGlobalShaderParameters))]
+    static class SonarTraceWBOITGlobals
+    {
+        static readonly HashSet<string> seen = new HashSet<string>();
+
+        public static void ResetSeen()
+        {
+            seen.Clear();
+        }
+
+        [HarmonyPostfix]
+        static void Postfix(WBOIT __instance)
+        {
+            if (!SonarStereoTrace.WindowOpen || Camera.current == null) return;
+            string eye = Camera.current.stereoTargetEye.ToString();
+            if (!seen.Add(eye)) return;
+
+            var mat = SonarStereoTrace.ReadField(__instance, "compositeMaterial") as Material;
+            if (mat == null || mat.shader == null) return;
+            int count = mat.shader.GetPropertyCount();
+            for (int i = 0; i < count; i++)
+            {
+                string name = mat.shader.GetPropertyName(i);
+                var type = mat.shader.GetPropertyType(i);
+                if (type == UnityEngine.Rendering.ShaderPropertyType.Float)
+                {
+                    Mod.logger.LogInfo($"[SonarTrace] wboitGlobal {name} eye={eye} = {SonarStereoTrace.GlobalFloat(name):0.###}");
+                }
+                else if (type == UnityEngine.Rendering.ShaderPropertyType.Vector)
+                {
+                    Mod.logger.LogInfo($"[SonarTrace] wboitGlobal {name} eye={eye} = {SonarStereoTrace.GlobalVector(name)}");
+                }
+                else if (type == UnityEngine.Rendering.ShaderPropertyType.Color)
+                {
+                    Mod.logger.LogInfo($"[SonarTrace] wboitGlobal {name} eye={eye} = {SonarStereoTrace.GlobalColor(name)}");
+                }
+                else continue;
+            }
+        }
+    }
+
     // Screen-space sonar ping FX. Logged unconditionally (not only during an
     // open window) so a call outside the ping window is still visible in the
     // log. Also logs the component context and the material property values:
@@ -552,11 +609,12 @@ namespace SubmersedVR
 
     #endregion
 
-    // Hooked into the WBOIT overlay materials via Material.onWillRender: the
-    // grid is composited per eye, and its phase follows the per-eye camera
-    // position (the builtin _WorldSpaceCameraPos). The hook logs the per-eye
-    // value (throttled, during a ping window) and forces a shared anchor (the
-    // rig pose) so both eyes render the grid identically
+    // Hooked into the sonar materials via Material.onWillRender: the grid is
+    // drawn per eye, and its phase follows the per-eye camera position (the
+    // builtin _WorldSpaceCameraPos). The hook logs the per-eye values
+    // (throttled, during a ping window) and forces a shared anchor: the ping
+    // origin, frozen at trigger time, so both eyes render the grid from the
+    // same position and it stops sliding with the head
     class OverlayEyeHook
     {
         readonly HashSet<string> loggedEyes = new HashSet<string>();
@@ -572,14 +630,11 @@ namespace SubmersedVR
                 if (loggedEyes.Add(eye) || Time.frameCount - lastFrame >= 30)
                 {
                     lastFrame = Time.frameCount;
-                    SonarStereoTrace.Log($"willrender {m.name} eye={eye} worldCamPos={m.GetVector("_WorldSpaceCameraPos")}");
+                    SonarStereoTrace.Log($"willrender {m.name} eye={eye} worldCamPos={m.GetVector("_WorldSpaceCameraPos")} projParams={m.GetVector("_ProjectionParams")}");
                 }
             }
-            var root = SNCameraRoot.main;
-            if (root != null && root.mainCam != null)
-            {
-                m.SetVector("_WorldSpaceCameraPos", root.mainCam.transform.position);
-            }
+            // The fix: shared camera anchor, frozen at the last ping trigger
+            m.SetVector("_WorldSpaceCameraPos", SonarStereoTrace.Origin);
         }
     }
 }

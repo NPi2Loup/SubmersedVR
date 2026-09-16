@@ -83,9 +83,9 @@ namespace SubmersedVR
             // ladder [A]") is the target info: it goes to the hit point,
             // with its action icon and the repair progress donut (%). The
             // tool info (use texts + energy) stays on the hand canvas.
-            // Laid out around the laser dot at the hit point (to be tuned)
+            // Like the original hand layout: icon on top, text below
             var iconRt = HandReticle.main.iconCanvas;
-            MovePart(iconRt, -28f);
+            MovePart(iconRt, 18f);
             // The donut and % label: a child of the icon container follows
             // the icon move, a sibling has to be moved on its own
             foreach (var comp in new Component[] { HandReticle.main.progressImage, HandReticle.main.progressText })
@@ -96,11 +96,11 @@ namespace SubmersedVR
                 }
                 if (!comp.transform.IsChildOf(iconRt))
                 {
-                    MovePart(comp, -28f);
+                    MovePart(comp, 18f);
                 }
             }
-            MovePart(HandReticle.main.compTextHand, 32f);
-            MovePart(HandReticle.main.compTextHandSubscript, 6f);
+            MovePart(HandReticle.main.compTextHand, -16f);
+            MovePart(HandReticle.main.compTextHandSubscript, -38f);
         }
 
         static void MovePart(Component comp, float y)

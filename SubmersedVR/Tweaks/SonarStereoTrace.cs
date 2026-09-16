@@ -10,15 +10,17 @@ namespace SubmersedVR
 {
     // Diagnostic (temporary): find the sonar ping wave. The in-game symptom
     // is a grid texture on object outlines whose anchoring follows the camera
-    // position, misaligned between the two stereo eyes. v7 logs the
-    // SonarScreenFX component context (gameobject, parent chain) and dumps
-    // the values of its material properties at ping time and every 30 frames
-    // during the window, to identify which property drives the grid and
-    // whether it correlates with the camera position. The re-scan (6 m,
-    // wave-like names forced) logs new renderers with their parent chain, and
-    // the VFX markers are logged unconditionally so a call outside the ping
-    // window is not missed. The v2 trace showed the eye matrices are static
-    // (identity, half-IPD offset) and MainCamera renders "Both".
+    // position, misaligned between the two stereo eyes. v8 hunts the shader
+    // that draws the grid: the re-scan (40 m) logs new objects and, above
+    // all, shader swaps on pre-existing objects (the wave paints existing
+    // geometry, it is not a spawned object), collects the materials of
+    // sonar-named shaders and dumps their property values (material and
+    // global uniforms) every 30 frames, to identify which uniform drives
+    // the grid and whether it tracks the camera. The v7 trace showed the
+    // SonarScreenFX material is null and the VFXScan/VFXScanning paths are
+    // never called (Seamoth or Cyclops). The v2 trace showed the eye
+    // matrices are static (identity, half-IPD offset) and MainCamera renders
+    // "Both".
     // UnityEngine engine methods (Shader.SetGlobal*, Material.Set*) are native
     // with no managed body and cannot be patched with Harmony, so this trace
     // only patches game assembly methods.
@@ -28,9 +30,10 @@ namespace SubmersedVR
 
         // Re-scan cadence (frames), radius and limits
         private const int RescanEveryFrames = 30;
-        private const float RescanRadius = 6f;
+        private const float RescanRadius = 40f;
         private const int MaxNewPerRescan = 10;
         private const int MaxSampledCandidates = 15;
+        private const int MaxSonarMats = 3;
 
         static float windowEnd = -1f;
         static bool windowActive;
@@ -38,6 +41,8 @@ namespace SubmersedVR
         static bool originValid;
         public static Material fxMaterial;
         static List<GameObject> candidates = new List<GameObject>();
+        static List<Material> sonarMats = new List<Material>();
+        static Dictionary<Renderer, string> shaderSnapshot = new Dictionary<Renderer, string>();
         static HashSet<string> seen = new HashSet<string>();
         static int rescanFrame = -1;
         static int sampleFrame = -1;
@@ -51,6 +56,7 @@ namespace SubmersedVR
             windowEnd = Time.time + WindowDuration;
             windowActive = true;
             candidates.Clear();
+            sonarMats.Clear();
             seen.Clear();
             rescanFrame = -1;
             sampleFrame = -1;
@@ -93,6 +99,15 @@ namespace SubmersedVR
             {
                 AddNamesToSeen(root.mainCam.transform);
             }
+            // Snapshot the shader of every renderer so the re-scans can log
+            // the swap the ping performs on pre-existing objects: the wave is
+            // painted on existing geometry, it is not a spawned object
+            shaderSnapshot.Clear();
+            foreach (var renderer in Object.FindObjectsOfType<Renderer>())
+            {
+                shaderSnapshot[renderer] = renderer.sharedMaterial?.shader?.name ?? "-";
+            }
+            Mod.logger.LogInfo($"[SonarTrace] shader snapshot: {shaderSnapshot.Count} renderers");
         }
 
         static void AddNamesToSeen(Transform t)
@@ -151,6 +166,28 @@ namespace SubmersedVR
             {
                 var t = renderer.transform;
                 if (Vector3.Distance(t.position, origin) >= RescanRadius) continue;
+                string shader = renderer.sharedMaterial?.shader?.name ?? "-";
+
+                // The ping may paint pre-existing geometry: a shader change on
+                // an object that was already there is the wave signature
+                string oldShader;
+                if (shaderSnapshot.TryGetValue(renderer, out oldShader) && oldShader != shader)
+                {
+                    shaderSnapshot[renderer] = shader;
+                    string swapParent = t.parent != null ? t.parent.name : "<none>";
+                    Mod.logger.LogInfo($"[SonarTrace] shaderSwap: {t.name} {oldShader} -> {shader} pos={t.position} camPos={camPos} parent={swapParent} comps={LogComponentTypes(t)}");
+                    LogMaterialProperties(renderer.sharedMaterial);
+                }
+
+                if (IsSonarShader(shader))
+                {
+                    var mat = renderer.sharedMaterial;
+                    if (mat != null && !sonarMats.Contains(mat))
+                    {
+                        sonarMats.Add(mat);
+                    }
+                }
+
                 if (!seen.Add(t.name)) continue;
                 // Wave-like names are logged even past the per-rescan cap, so a
                 // busy frame cannot mask the ping visual
@@ -159,7 +196,6 @@ namespace SubmersedVR
                 {
                     candidates.Add(t.gameObject);
                 }
-                string shader = renderer.sharedMaterial != null ? renderer.sharedMaterial.shader.name : "-";
                 string parent = t.parent != null ? t.parent.name : "<none>";
                 string grand = t.parent != null && t.parent.parent != null ? t.parent.parent.name : "<none>";
                 Mod.logger.LogInfo($"[SonarTrace] new: {t.name} active={t.gameObject.activeInHierarchy} pos={t.position} deltaFromCam={t.position - camPos} camPos={camPos} shader={shader} parent={parent} gp={grand}");
@@ -179,8 +215,35 @@ namespace SubmersedVR
             return name.Contains("scan") || name.Contains("sonar") || name.Contains("wave") || name.Contains("ping");
         }
 
-        // Log the current values of the material's numeric properties: which
-        // ones animate over the wave and how they correlate with the camera
+        // The shader that draws the sonar grid (FX/WBOIT-CyclopsSonar and
+        // friends); matched by name so both vehicle variants are caught
+        static bool IsSonarShader(string shaderName)
+        {
+            if (shaderName == null) return false;
+            shaderName = shaderName.ToLowerInvariant();
+            return shaderName.Contains("sonar") || shaderName.Contains("wboit");
+        }
+
+        // The script component names on the object: identifies the game class
+        // that owns the sonar visual
+        static string LogComponentTypes(Transform t)
+        {
+            var comps = t.GetComponents<Component>();
+            var names = new List<string>();
+            foreach (var c in comps)
+            {
+                if (c == null) continue;
+                var tn = c.GetType().Name;
+                if (!names.Contains(tn)) names.Add(tn);
+            }
+            return string.Join(",", names);
+        }
+
+        // Log the current values of the material's numeric properties, both
+        // the per-material value and the global uniform: the grid may be
+        // driven by a global set once per ping (or per eye). Which one
+        // animates over the wave, and how it correlates with the camera, is
+        // the fix target
         public static void LogMaterialProperties(Material m)
         {
             if (m == null) return;
@@ -190,14 +253,39 @@ namespace SubmersedVR
             for (int i = 0; i < count; i++)
             {
                 string name = shader.GetPropertyName(i);
-                string value;
                 var type = shader.GetPropertyType(i);
-                if (type == UnityEngine.Rendering.ShaderPropertyType.Float) value = m.GetFloat(name).ToString("0.###");
-                else if (type == UnityEngine.Rendering.ShaderPropertyType.Vector) value = m.GetVector(name).ToString();
-                else if (type == UnityEngine.Rendering.ShaderPropertyType.Color) value = m.GetColor(name).ToString();
+                if (type == UnityEngine.Rendering.ShaderPropertyType.Float)
+                {
+                    Mod.logger.LogInfo($"[SonarTrace] fxmat {m.name}.{name} mat={m.GetFloat(name):0.###} global={GlobalFloat(name):0.###}");
+                }
+                else if (type == UnityEngine.Rendering.ShaderPropertyType.Vector)
+                {
+                    Mod.logger.LogInfo($"[SonarTrace] fxmat {m.name}.{name} mat={m.GetVector(name)} global={GlobalVector(name)}");
+                }
+                else if (type == UnityEngine.Rendering.ShaderPropertyType.Color)
+                {
+                    Mod.logger.LogInfo($"[SonarTrace] fxmat {m.name}.{name} mat={m.GetColor(name)} global={GlobalColor(name)}");
+                }
                 else continue;
-                Mod.logger.LogInfo($"[SonarTrace] fxmat {m.name}.{name} = {value}");
             }
+        }
+
+        static float GlobalFloat(string name)
+        {
+            try { return Shader.GetGlobalFloat(name); }
+            catch { return -12345f; }
+        }
+
+        static Vector4 GlobalVector(string name)
+        {
+            try { return Shader.GetGlobalVector(name); }
+            catch { return new Vector4(-12345f, -12345f, -12345f, -12345f); }
+        }
+
+        static Color GlobalColor(string name)
+        {
+            try { return Shader.GetGlobalColor(name); }
+            catch { return Color.magenta; }
         }
 
         // Sample the candidate positions and the screen FX material values
@@ -218,6 +306,20 @@ namespace SubmersedVR
             var rig = VRCameraRig.instance;
             if (rig == null || rig.vrCamera == null) return;
             Vector3 camPos = rig.vrCamera.transform.position;
+
+            // The sonar-shader materials: their property values over the
+            // window, against camPos and the ping origin, reveal the grid
+            // driver (constant vs camera-tracking)
+            int matDumped = 0;
+            foreach (var m in sonarMats)
+            {
+                if (matDumped >= MaxSonarMats) break;
+                if (m == null || m.shader == null) continue;
+                matDumped++;
+                Mod.logger.LogInfo($"[SonarTrace] sonarmat {m.name} shader={m.shader.name} cam={camPos} origin={origin}");
+                LogMaterialProperties(m);
+            }
+
             int sampled = 0;
             foreach (var go in candidates)
             {

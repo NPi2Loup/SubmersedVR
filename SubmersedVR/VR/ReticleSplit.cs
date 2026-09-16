@@ -26,8 +26,14 @@ namespace SubmersedVR
 
         static GameObject targetCanvasGo;
         static List<MovedPart> moved = new List<MovedPart>();
+        // Reticle root currently split (null when unsplit); the VRCameraRig
+        // watchdog re-applies the setup when a new reticle instance appears
+        // (save/level load recreates it after VRHud.Setup already ran)
+        static Transform splitRoot;
 
         public static Transform TargetCanvas => targetCanvasGo != null ? targetCanvasGo.transform : null;
+
+        public static Transform SplitRoot => splitRoot;
 
         public static void Split(Camera uiCamera)
         {
@@ -38,6 +44,7 @@ namespace SubmersedVR
                 return;
             }
             var root = HandReticle.main.gameObject.transform;
+            splitRoot = root;
             targetCanvasGo = new GameObject("TargetReticleCanvas", typeof(RectTransform));
             targetCanvasGo.transform.SetParent(root, false);
 
@@ -157,6 +164,7 @@ namespace SubmersedVR
                 part.rt.localScale = part.originalLocalScale;
             }
             moved.Clear();
+            splitRoot = null;
             if (targetCanvasGo != null)
             {
                 UnityEngine.Object.Destroy(targetCanvasGo);

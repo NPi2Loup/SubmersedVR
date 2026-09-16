@@ -39,6 +39,13 @@ namespace SubmersedVR
             var anchor = rig.rightControllerUI.transform;
             if (transform.parent != anchor)
             {
+                // Not anchored at the hand anymore: hide the split target so it
+                // does not freeze at the last hit point
+                var frozenTarget = ReticleSplit.TargetCanvas;
+                if (frozenTarget != null)
+                {
+                    frozenTarget.gameObject.SetActive(false);
+                }
                 return;
             }
 

@@ -99,8 +99,8 @@ namespace SubmersedVR
                     MovePart(comp, 18f);
                 }
             }
-            MovePart(HandReticle.main.compTextHand, -16f);
-            MovePart(HandReticle.main.compTextHandSubscript, -38f);
+            MovePart(HandReticle.main.compTextHand, -24f);
+            MovePart(HandReticle.main.compTextHandSubscript, -46f);
         }
 
         static void MovePart(Component comp, float y)

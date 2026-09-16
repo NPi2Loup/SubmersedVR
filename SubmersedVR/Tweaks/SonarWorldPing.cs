@@ -4,24 +4,25 @@ using UnityEngine;
 
 namespace SubmersedVR
 {
-    // World-anchored sonar grid (the fix). The game's WBOIT post effect
-    // composites VFXOverlayMaterial overlays per eye (the Hidden/WBOIT
-    // Composite pass on the main camera, from the depth buffer): the sonar
-    // grid is one of those overlays, which is why it follows the head,
-    // "paints the object contours" and desyncs between the two eyes in
-    // single-pass stereo. The fix has two parts: (1) SonarOverlayBlock
-    // below makes the composite pass skip the sonar overlay, (2) this class
-    // repaints the hologram's dedicated grid mesh (the one with a
-    // sonar-named shader) with a world-space additive grid, kept for as long
-    // as the hologram is visible (like the non-VR minimap), plus an
-    // expanding wave ring on each ping. Both eyes then see the same,
-    // stable visual.
+    // World-anchored sonar grid (the fix). The game draws its grid on the
+    // hologram's own meshes (notably the screen-projected "projector", which
+    // is why the grid follows the head and desyncs between the two eyes in
+    // single-pass stereo - the WBOIT composite pass itself carries no sonar
+    // overlay, confirmed in-game: the FillBuffer prefix below never fires).
+    // The fix: repaint ALL hologram meshes with world-space additive
+    // materials - the dedicated grid mesh (sonar-named shader) gets the
+    // grid texture, the model meshes (mini-sub, projector, light cone) get
+    // a plain glow - kept for as long as the hologram is visible (like the
+    // non-VR minimap), plus an expanding wave ring on each ping. Both eyes
+    // then see the same, stable visual.
     static class SonarWorldPing
     {
         private const float MaxRadius = 10f;
         private const float SearchRadius = 50f;
         private const float GridScrollSpeed = 0.3f;
         private const float GridFadeIn = 0.3f;
+        // Alpha multiplier for the plain (non-grid) hologram materials
+        private const float PlainAlphaScale = 0.25f;
         // Hysteresis: the hologram must stay hidden this many frames before
         // the grid material is restored (avoids swap/restore churn)
         private const int HiddenFramesToRestore = 60;
@@ -41,6 +42,11 @@ namespace SubmersedVR
         };
 
         static string additiveShaderName;
+        // Adopted from the game's ObjectivePing particle (the runtime
+        // Shader.Find database does not include its additive shader)
+        static Shader adoptedShader;
+        static int lastAdoptFrame;
+        static bool updateExceptionLogged;
         static Texture2D gridTexture;
         static Texture2D ringTexture;
 
@@ -63,9 +69,12 @@ namespace SubmersedVR
         static List<Material[]> originalMaterials = new List<Material[]>();
         static List<Material> gridMaterials = new List<Material>();
         static List<Color> gridBaseColors = new List<Color>();
+        // Per-material flag: true = grid texture (UV scroll), false = plain
+        static List<bool> gridSlots = new List<bool>();
 
         public static void Trigger()
         {
+            if (Mod.quitting) return;
             var root = SNCameraRoot.main;
             if (root == null || root.mainCam == null) return;
             var camTransform = root.mainCam.transform;
@@ -80,14 +89,30 @@ namespace SubmersedVR
             duration = waveDuration;
             origin = camTransform.position;
 
-            EnsureSwapped();
-            CreateRing(camTransform.position, camTransform.forward);
-            Mod.logger.LogInfo($"[SonarWorld] ping: swapped {swappedRenderers.Count} renderers at origin={origin}");
+            // The ping spawns the game's ObjectivePing particle: grab its
+            // additive shader (not in the runtime Shader.Find database)
+            try
+            {
+                TryAdoptAdditiveShader();
+                EnsureSwapped();
+                CreateRing(camTransform.position, camTransform.forward);
+                Mod.logger.LogInfo($"[SonarWorld] ping: swapped {swappedRenderers.Count} renderers at origin={origin}");
+            }
+            catch (System.Exception e)
+            {
+                if (!updateExceptionLogged)
+                {
+                    updateExceptionLogged = true;
+                    Mod.logger.LogError($"[SonarWorld] Trigger exception: {e}");
+                }
+            }
         }
 
-        // Swap the hologram's dedicated grid mesh (sonar-named material)
-        // for the world-space grid. The model meshes keep their original
-        // look. Called on each ping and periodically until the hologram is
+        // Swap ALL hologram renderers for world-space additive materials:
+        // the dedicated grid mesh (sonar-named material) gets the grid
+        // texture, the model meshes (mini-sub, projector, light cone) get a
+        // plain glow - the projector is what draws the camera-following
+        // grid. Called on each ping and periodically until the hologram is
         // found (it may spawn between pings, e.g. on sonar activation)
         static void EnsureSwapped()
         {
@@ -112,30 +137,33 @@ namespace SubmersedVR
                 var mats = renderer.sharedMaterials;
                 if (mats == null || mats.Length == 0) continue;
 
-                bool hasSonarShader = false;
-                foreach (var mat in mats)
-                {
-                    if (mat != null && mat.shader != null && mat.shader.name != null
-                        && mat.shader.name.ToLowerInvariant().IndexOf("sonar") >= 0)
-                    {
-                        hasSonarShader = true;
-                        break;
-                    }
-                }
-                if (!hasSonarShader) continue;
-
                 var newMats = new Material[mats.Length];
+                bool anyGrid = false;
                 for (int i = 0; i < mats.Length; i++)
                 {
-                    Color color = mats[i] != null && mats[i].HasProperty("_PingColor")
-                        ? mats[i].GetColor("_PingColor") : FallbackPingColor;
+                    var orig = mats[i];
+                    bool grid = orig != null && orig.shader != null && orig.shader.name != null
+                        && orig.shader.name.ToLowerInvariant().IndexOf("sonar") >= 0;
+                    Color color = orig != null && orig.HasProperty("_PingColor")
+                        ? orig.GetColor("_PingColor") : FallbackPingColor;
                     var newMat = new Material(shader);
-                    newMat.mainTexture = GridTexture();
+                    if (grid)
+                    {
+                        newMat.mainTexture = GridTexture();
+                        anyGrid = true;
+                    }
+                    else
+                    {
+                        // Plain glow (no texture): keeps the silhouette and
+                        // removes the mesh-drawn grid
+                        color.a *= PlainAlphaScale;
+                    }
                     newMat.color = color;
                     newMat.renderQueue = 3100;
                     newMats[i] = newMat;
                     gridMaterials.Add(newMat);
                     gridBaseColors.Add(color);
+                    gridSlots.Add(grid);
                 }
                 swappedRenderers.Add(renderer);
                 originalMaterials.Add(mats);
@@ -145,63 +173,83 @@ namespace SubmersedVR
                 hiddenFrames = 0;
 
                 var parentName = renderer.transform.parent != null ? renderer.transform.parent.name : "?";
-                Mod.logger.LogInfo($"[SonarWorld] grid: {renderer.name} (parent={parentName}) {mats.Length} slot(s): {DescribeMats(mats)}");
+                Mod.logger.LogInfo($"[SonarWorld] swap: {renderer.name} (parent={parentName}) {mats.Length} slot(s): {DescribeMats(mats)} grid={anyGrid}");
             }
         }
 
         public static void Update()
         {
-            // The stable grid persists while the hologram is visible (like
-            // the non-VR minimap) and is restored once the hologram is gone
-            if (swapped)
+            if (Mod.quitting) return;
+            try
             {
-                bool visible = false;
-                for (int i = 0; i < swappedRenderers.Count; i++)
-                {
-                    var renderer = swappedRenderers[i];
-                    if (renderer != null && renderer.gameObject.activeInHierarchy)
-                    {
-                        visible = true;
-                        break;
-                    }
-                }
-                if (visible)
-                {
-                    hiddenFrames = 0;
-                    float fade = Mathf.Clamp01((Time.time - swapTime) / GridFadeIn);
-                    for (int i = 0; i < gridMaterials.Count; i++)
-                    {
-                        var mat = gridMaterials[i];
-                        if (mat == null) continue;
-                        mat.mainTextureOffset += Vector2.right * GridScrollSpeed * Time.deltaTime;
-                        var c = gridBaseColors[i];
-                        c.a *= fade;
-                        mat.color = c;
-                    }
-                }
-                else if (++hiddenFrames >= HiddenFramesToRestore)
-                {
-                    Restore();
-                }
-            }
-            else if (Time.frameCount - lastRetryFrame >= RetryRescanFrames)
-            {
-                lastRetryFrame = Time.frameCount;
-                EnsureSwapped();
-            }
+                // Adopt the game's additive shader once the ping's particle
+                // exists (a few frames after the ping)
+                TryAdoptAdditiveShader();
 
-            // Expanding wave ring on each ping
-            if (ringGo != null && ringMat != null)
-            {
-                float t = Time.time - ringStartTime;
-                float s = MaxRadius * 2f * (t / duration);
-                ringGo.transform.localScale = new Vector3(s, s, s);
-                var c = ringMat.color;
-                c.a = ringBaseAlpha * Mathf.Clamp01(1f - t / duration);
-                ringMat.color = c;
-                if (t > duration)
+                // The stable grid persists while the hologram is visible
+                // (like the non-VR minimap) and is restored once the
+                // hologram is gone
+                if (swapped)
                 {
-                    DestroyRing();
+                    bool visible = false;
+                    for (int i = 0; i < swappedRenderers.Count; i++)
+                    {
+                        var renderer = swappedRenderers[i];
+                        if (renderer != null && renderer.gameObject.activeInHierarchy)
+                        {
+                            visible = true;
+                            break;
+                        }
+                    }
+                    if (visible)
+                    {
+                        hiddenFrames = 0;
+                        float fade = Mathf.Clamp01((Time.time - swapTime) / GridFadeIn);
+                        for (int i = 0; i < gridMaterials.Count; i++)
+                        {
+                            var mat = gridMaterials[i];
+                            if (mat == null) continue;
+                            if (gridSlots[i])
+                            {
+                                mat.mainTextureOffset += Vector2.right * GridScrollSpeed * Time.deltaTime;
+                            }
+                            var c = gridBaseColors[i];
+                            c.a *= fade;
+                            mat.color = c;
+                        }
+                    }
+                    else if (++hiddenFrames >= HiddenFramesToRestore)
+                    {
+                        Restore();
+                    }
+                }
+                else if (Time.frameCount - lastRetryFrame >= RetryRescanFrames)
+                {
+                    lastRetryFrame = Time.frameCount;
+                    EnsureSwapped();
+                }
+
+                // Expanding wave ring on each ping
+                if (ringGo != null && ringMat != null)
+                {
+                    float t = Time.time - ringStartTime;
+                    float s = MaxRadius * 2f * (t / duration);
+                    ringGo.transform.localScale = new Vector3(s, s, s);
+                    var c = ringMat.color;
+                    c.a = ringBaseAlpha * Mathf.Clamp01(1f - t / duration);
+                    ringMat.color = c;
+                    if (t > duration)
+                    {
+                        DestroyRing();
+                    }
+                }
+            }
+            catch (System.Exception e)
+            {
+                if (!updateExceptionLogged)
+                {
+                    updateExceptionLogged = true;
+                    Mod.logger.LogError($"[SonarWorld] Update exception: {e}");
                 }
             }
         }
@@ -228,6 +276,7 @@ namespace SubmersedVR
             originalMaterials.Clear();
             gridMaterials.Clear();
             gridBaseColors.Clear();
+            gridSlots.Clear();
             swapped = false;
             hiddenFrames = 0;
         }
@@ -309,12 +358,49 @@ namespace SubmersedVR
             return string.Join(", ", parts);
         }
 
+        // The runtime Shader.Find database does not include the additive
+        // particle shader (the log shows it still returns Sprites/Default
+        // while the ping's particle already uses it): the shader is loaded
+        // by the particle's material reference, not the find database. The
+        // ping itself spawns the ObjectivePing particle, so adopt the
+        // shader from its material a few frames later. Runs on every
+        // ping/rescan until the shader is adopted, then is a no-op
+        static void TryAdoptAdditiveShader()
+        {
+            if (adoptedShader != null) return;
+            if (Time.frameCount - lastAdoptFrame < 30) return;
+            lastAdoptFrame = Time.frameCount;
+            var go = GameObject.Find("ObjectivePing");
+            if (go == null) return;
+            var rend = go.GetComponent<Renderer>();
+            if (rend == null) return;
+            var mats = rend.sharedMaterials;
+            for (int i = 0; i < mats.Length; i++)
+            {
+                var m = mats[i];
+                if (m != null && m.shader != null && m.shader.name != null
+                    && m.shader.name.ToLowerInvariant().IndexOf("additive") >= 0)
+                {
+                    adoptedShader = m.shader;
+                    if (additiveShaderName != adoptedShader.name)
+                    {
+                        additiveShaderName = adoptedShader.name;
+                        Mod.logger.LogInfo($"[SonarWorld] additive shader={adoptedShader.name} (adopted from ObjectivePing)");
+                    }
+                    return;
+                }
+            }
+        }
+
         // The probe runs on every ping/rescan (the result is not cached):
-        // the first ping may happen before some additive shaders are loaded
-        // in-game (ObjectivePing loads Legacy Shaders/Particles/Additive
-        // lazily, at its first ping)
+        // the first ping may happen before the additive shader is available
+        // (adopted from the ObjectivePing particle, see above)
         static Shader AdditiveShader()
         {
+            if (adoptedShader != null)
+            {
+                return adoptedShader;
+            }
             Shader found = null;
             foreach (var name in AdditiveShaderNames)
             {

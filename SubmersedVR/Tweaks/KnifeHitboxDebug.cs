@@ -17,8 +17,9 @@ namespace SubmersedVR
         // How long the hitboxes flash after a swing is fired
         private const float BlinkDuration = 0.2f;
 
-        private static readonly Color ProbeColor = new Color(1f, 1f, 0f, 0.9f);
-        private static readonly Color GameHitboxColor = new Color(1f, 0.5f, 0f, 0.9f);
+        // Thin + translucent so the wireframes don't obscure the view
+        private static readonly Color ProbeColor = new Color(1f, 1f, 0f, 0.5f);
+        private static readonly Color GameHitboxColor = new Color(1f, 0.5f, 0f, 0.5f);
 
         private LineRenderer probeLine;
         private LineRenderer gameLine;
@@ -34,17 +35,44 @@ namespace SubmersedVR
             GameObject go = new GameObject(name);
             go.transform.SetParent(transform, false);
             var line = go.AddComponent<LineRenderer>();
-            Material material = new Material(ShaderManager.preloadedShaders.DebugDisplaySolid);
-            material.SetColor(ShaderPropertyID._Color, color);
+            // Sprites/Default is alpha blended and exists in-game (the solid
+            // debug shader ignores alpha); the tint comes from the line
+            // colors so the alpha is applied only once
+            var shader = Shader.Find("Sprites/Default");
+            bool transparent = shader != null;
+            Material material = new Material(transparent ? shader : ShaderManager.preloadedShaders.DebugDisplaySolid);
+            if (transparent)
+            {
+                material.mainTexture = WhiteTexture();
+                material.SetColor(ShaderPropertyID._Color, Color.white);
+            }
+            else
+            {
+                material.SetColor(ShaderPropertyID._Color, color);
+            }
             line.material = material;
             line.startColor = color;
             line.endColor = color;
-            line.startWidth = 0.01f;
-            line.endWidth = 0.01f;
+            line.startWidth = 0.004f;
+            line.endWidth = 0.004f;
             line.useWorldSpace = true;
             line.positionCount = 0;
             line.enabled = false;
             return line;
+        }
+
+        static Texture2D whiteTexture;
+
+        static Texture2D WhiteTexture()
+        {
+            if (whiteTexture == null)
+            {
+                whiteTexture = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+                whiteTexture.name = "KnifeWireframeWhite";
+                whiteTexture.SetPixel(0, 0, Color.white);
+                whiteTexture.Apply();
+            }
+            return whiteTexture;
         }
 
         void Update()

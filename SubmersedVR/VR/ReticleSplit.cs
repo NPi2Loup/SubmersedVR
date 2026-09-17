@@ -7,7 +7,9 @@ namespace SubmersedVR
     // (compTextHand/HandSubscript, e.g. "Climb the ladder [A]") moves to a
     // second world canvas that ReticleBillboard projects on the laser hit
     // point, while the tool info (use texts, energy, progress, icons) stays
-    // on the root canvas at the hand.
+    // on the root canvas at the hand. Split only registers the parts; all
+    // movement is driven per-frame by Enforce (see ReticleBillboard), which
+    // also honors the ReticlePointerSplit setting (off = original layout).
     static class ReticleSplit
     {
         class MovedPart
@@ -85,9 +87,9 @@ namespace SubmersedVR
             // tool info (use texts + energy) stays on the hand canvas.
             // Like the original hand layout: icon on top, text below
             var iconRt = HandReticle.main.iconCanvas;
-            MovePart(iconRt, 26f);
+            RegisterPart(iconRt, 26f);
             // The donut and % label: a child of the icon container follows
-            // the icon move, a sibling has to be moved on its own
+            // the icon move, a sibling has to be registered on its own
             foreach (var comp in new Component[] { HandReticle.main.progressImage, HandReticle.main.progressText })
             {
                 if (comp == null)
@@ -96,14 +98,16 @@ namespace SubmersedVR
                 }
                 if (!comp.transform.IsChildOf(iconRt))
                 {
-                    MovePart(comp, 26f);
+                    RegisterPart(comp, 26f);
                 }
             }
-            MovePart(HandReticle.main.compTextHand, -34f);
-            MovePart(HandReticle.main.compTextHandSubscript, -56f);
+            RegisterPart(HandReticle.main.compTextHand, -34f);
+            RegisterPart(HandReticle.main.compTextHandSubscript, -56f);
         }
 
-        static void MovePart(Component comp, float y)
+        // Captures the original layout for RestorePart and the split layout
+        // for Enforce, without moving anything: Enforce places the parts
+        static void RegisterPart(Component comp, float y)
         {
             if (comp == null)
             {
@@ -120,27 +124,21 @@ namespace SubmersedVR
                 originalAnchorMax = rt.anchorMax,
                 originalPivot = rt.pivot,
                 originalAnchoredPos = rt.anchoredPosition,
+                splitY = y,
             };
-            rt.SetParent(targetCanvasGo.transform, false);
-            part.splitY = y;
             moved.Add(part);
             if (Settings.IsDebugEnabled)
             {
-                Mod.logger.LogInfo($"[ReticleSplit] {rt.name}: anchors {rt.anchorMin}/{rt.anchorMax} pivot {rt.pivot} size {rt.sizeDelta} pos {rt.anchoredPosition}");
+                Mod.logger.LogInfo($"[ReticleSplit] registered {rt.name}: anchors {rt.anchorMin}/{rt.anchorMax} pivot {rt.pivot} size {rt.sizeDelta} pos {rt.anchoredPosition}");
             }
-            // Initial layout on the target canvas (to be tuned later);
-            // sizeDelta stays as is
-            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = new Vector2(0f, y);
         }
 
         // The game re-parents the primary action text to its icon every frame
-        // (icon-driven layout), undoing the one-shot Split. Called from
-        // ReticleBillboard.LateUpdate: while aiming, a part moved back by the
-        // game goes to the target canvas with the split layout; without a
-        // world target (e.g. build mode) the parts live on the hand with the
-        // original layout, so the action info stays visible
+        // (icon-driven layout), so the split must be re-asserted per frame.
+        // Called from ReticleBillboard.LateUpdate with aiming = world target
+        // AND the ReticlePointerSplit setting: true puts the parts on the
+        // target canvas with the split layout, false puts them back on the
+        // hand with the original layout (the setting off = original behavior)
         static int reparentLogCount;
 
         public static void Enforce(bool aiming)

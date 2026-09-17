@@ -35,6 +35,9 @@ namespace SubmersedVR
         public static bool PutHandReticleOnLaserPointer;
         public static event BooleanChanged PutHandReticleOnLaserPointerChanged;
 
+        // Split the target action info (texts, icon, progress) to the laser hit point; off = original all-at-hand layout
+        public static bool ReticlePointerSplit = true;
+
         public static bool PutBarsOnWrist;
         public static event BooleanChanged PutBarsOnWristChanged;
 
@@ -166,6 +169,7 @@ namespace SubmersedVR
 
             panel.AddHeading(tab, "Experimental");
             panel.AddToggleOption(tab, "Put hand reticle on laserpointer end", PutHandReticleOnLaserPointer, (value) => { PutHandReticleOnLaserPointer = value; PutHandReticleOnLaserPointerChanged(value); }, "Keeps the hand reticle at the hand and facing the view, so its text stays readable no matter how the tool model is held (e.g. the knife). Off keeps the fixed hand-mode rotation.");
+            panel.AddToggleOption(tab, "Reticle: target info at the laser pointer", ReticlePointerSplit, (value) => { ReticlePointerSplit = value; }, "While aiming, moves the target action texts, icon and progress to the laser hit point. Off keeps the original game behavior: all reticle info at the hand.");
             panel.AddToggleOption(tab, "Sonar Ping Mod (VR)", SonarModEnabled, (value) => { SonarModEnabled = value; }, "World-anchored ping ring and eye display control for the sonar. Off keeps the 100% original game sonar.");
             panel.AddChoiceOption<string>(tab, "Sonar Ping Eye", new string[] { "Both Eyes", "Left Eye", "Right Eye" }, SonarPingEye, (value) => { SonarPingEye = value; }, "During a sonar ping, which eye shows the screen sonar grid + object outlines. One eye removes the double-grid stereo artifact in VR (the game's grid is centered between the two eyes).");
             panel.AddToggleOption(tab, "Invert Y Axis in Seamoth/Cameras", InvertYAxis, (value) => { InvertYAxis = value; InvertYAxisChanged(value); }, "Enables Y axis inversion for Seamoth and Cameras.");

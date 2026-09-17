@@ -28,6 +28,10 @@ namespace SubmersedVR
         static string lastHandSub;
         static string lastUse;
         static string lastUseSub;
+        // Full child-tree dumps (capped: the energy % text ticks every second)
+        static int treeDumpCount;
+        static string lastDumpContext;
+        const int MaxTreeDumps = 40;
 
         void LateUpdate()
         {
@@ -54,13 +58,10 @@ namespace SubmersedVR
             transform.localScale = AnchorScale;
 
             var laser = rig.laserPointerUI;
-            bool aiming = rig.HasWorldTarget() && laser != null;
+            // Setting off or no world target (e.g. build mode): the parts
+            // stay on the hand with the original layout, all info visible
+            bool aiming = Settings.ReticlePointerSplit && rig.HasWorldTarget() && laser != null;
 
-            // The game re-parents the primary action text to its icon every
-            // frame: enforce the split back onto the target canvas while
-            // aiming; without a world target (e.g. build mode) the action
-            // texts must stay on the hand, otherwise the build info would
-            // be invisible
             ReticleSplit.Enforce(aiming);
 
             // Plane perpendicular to the hand laser (world up), like the
@@ -100,8 +101,10 @@ namespace SubmersedVR
             LogTexts();
         }
 
-        // Debug (Debug Overlays): logs the four text fields when they change;
-        // the hand/use mapping feeds the planned tool-info/target split
+        // Debug (Debug Overlays): logs the four text fields when they change,
+        // and dumps the full child tree when the pointed object/action changes
+        // (placeholder audit: the split must cover every element, incl. the
+        // Count text and the craft material icons)
         void LogTexts()
         {
             if (!Settings.IsDebugEnabled) return;
@@ -118,6 +121,77 @@ namespace SubmersedVR
             lastUse = use;
             lastUseSub = useSub;
             Mod.logger.LogInfo($"[ReticleDebug] Hand=\"{hand}\" HandSub=\"{handSub}\" Use=\"{use}\" UseSub=\"{useSub}\"");
+
+            string context = hand + "\u0001" + handSub;
+            if (context != lastDumpContext && treeDumpCount < MaxTreeDumps)
+            {
+                lastDumpContext = context;
+                treeDumpCount++;
+                DumpReticleTree();
+            }
+        }
+
+        // Debug (Debug Overlays): recursive dump of the reticle child tree;
+        // our split target canvas is skipped (it is our own overlay)
+        void DumpReticleTree()
+        {
+            var skip = ReticleSplit.TargetCanvas;
+            var sb = new System.Text.StringBuilder();
+            DumpNode(transform, skip, sb, 0);
+            foreach (var line in sb.ToString().Split('\n'))
+            {
+                if (line.Length > 0)
+                {
+                    Mod.logger.LogInfo("[ReticleDebug] tree: " + line);
+                }
+            }
+        }
+
+        static void DumpNode(Transform t, Transform skip, System.Text.StringBuilder sb, int depth)
+        {
+            if (depth > 4 || t == skip)
+            {
+                return;
+            }
+            var tmg = t.GetComponent<TextMeshProUGUI>();
+            var img = t.GetComponent<UnityEngine.UI.Image>();
+            var canvas = t.GetComponent<Canvas>();
+            var rt = t as RectTransform;
+            sb.Append(new string(' ', depth * 2)).Append(t.name);
+            if (!t.gameObject.activeInHierarchy)
+            {
+                sb.Append(" [inactive]");
+            }
+            if (rt != null)
+            {
+                sb.Append(" pos=").Append(rt.anchoredPosition).Append(" size=").Append(rt.sizeDelta);
+            }
+            if (tmg != null)
+            {
+                sb.Append(" TMP=\"").Append(EscapeText(tmg.text)).Append('"');
+            }
+            else if (img != null)
+            {
+                sb.Append(canvas != null ? " Image+Canvas" : " Image");
+            }
+            else if (canvas != null)
+            {
+                sb.Append(" Canvas");
+            }
+            sb.Append('\n');
+            for (int i = 0; i < t.childCount; i++)
+            {
+                DumpNode(t.GetChild(i), skip, sb, depth + 1);
+            }
+        }
+
+        static string EscapeText(string s)
+        {
+            if (string.IsNullOrEmpty(s))
+            {
+                return "";
+            }
+            return s.Replace("\r", "").Replace("\n", "\\n");
         }
 
         static string SafeText(TextMeshProUGUI comp)

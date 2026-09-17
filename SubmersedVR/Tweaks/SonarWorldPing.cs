@@ -88,8 +88,11 @@ namespace SubmersedVR
             if (Mod.quitting) return;
             if (!Settings.SonarModEnabled)
             {
-                // Switched off mid-ping: drop the ring in flight
+                // Switched off mid-ping: drop the ring in flight and clear the
+                // ping state so re-enabling is not caught by the cooldown
+                // guard or a stale IsPinging window
                 DestroyRing();
+                hasPinged = false;
                 return;
             }
             try

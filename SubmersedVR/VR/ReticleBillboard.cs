@@ -149,8 +149,15 @@ namespace SubmersedVR
 
         static void DumpNode(Transform t, Transform skip, System.Text.StringBuilder sb, int depth)
         {
-            if (depth > 4 || t == skip)
+            if (t == null || t == skip)
             {
+                return;
+            }
+            // Mark the cap instead of dropping silently: the audit must not
+            // mistake a truncated node for a non-existent one
+            if (depth >= 5)
+            {
+                sb.Append(new string(' ', depth * 2)).Append("… (depth limit)\n");
                 return;
             }
             var tmg = t.GetComponent<TextMeshProUGUI>();

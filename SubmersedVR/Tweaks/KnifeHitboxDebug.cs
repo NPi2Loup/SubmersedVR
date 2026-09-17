@@ -39,9 +39,9 @@ namespace SubmersedVR
             // debug shader ignores alpha); the tint comes from the line
             // colors so the alpha is applied only once
             var shader = Shader.Find("Sprites/Default");
-            bool transparent = shader != null;
-            Material material = new Material(transparent ? shader : ShaderManager.preloadedShaders.DebugDisplaySolid);
-            if (transparent)
+            bool spriteShaderFound = shader != null;
+            Material material = new Material(spriteShaderFound ? shader : ShaderManager.preloadedShaders.DebugDisplaySolid);
+            if (spriteShaderFound)
             {
                 material.mainTexture = WhiteTexture();
                 material.SetColor(ShaderPropertyID._Color, Color.white);

@@ -53,6 +53,7 @@ namespace SubmersedVR
         public static void Trigger()
         {
             if (Mod.quitting) return;
+            if (!Settings.SonarModEnabled) return;
             var root = SNCameraRoot.main;
             if (root == null || root.mainCam == null) return;
             var camTransform = root.mainCam.transform;
@@ -85,6 +86,12 @@ namespace SubmersedVR
         public static void Update()
         {
             if (Mod.quitting) return;
+            if (!Settings.SonarModEnabled)
+            {
+                // Switched off mid-ping: drop the ring in flight
+                DestroyRing();
+                return;
+            }
             try
             {
                 // Expanding wave ring on each ping
@@ -219,6 +226,10 @@ namespace SubmersedVR
         static bool Prefix(VFXOverlayMaterial __instance, out bool __result)
         {
             __result = true;
+            if (!Settings.SonarModEnabled)
+            {
+                return true;
+            }
             var mat = __instance != null ? __instance.material : null;
             if (mat == null || mat.shader == null || mat.shader.name == null)
             {
@@ -272,6 +283,11 @@ namespace SubmersedVR
         [HarmonyPostfix]
         static void Postfix(RenderTexture source, RenderTexture destination)
         {
+            // Off = 100% original game sonar: do not touch the effect at all
+            if (!Settings.SonarModEnabled)
+            {
+                return;
+            }
             if (!logged)
             {
                 logged = true;
@@ -436,6 +452,10 @@ namespace SubmersedVR
         [HarmonyPostfix]
         static void Postfix(SonarScreenFX __instance)
         {
+            if (!Settings.SonarModEnabled)
+            {
+                return;
+            }
             if (__instance.waveDuration > 0f)
             {
                 SonarWorldPing.waveDuration = __instance.waveDuration;

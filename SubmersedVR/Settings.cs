@@ -51,8 +51,10 @@ namespace SubmersedVR
 
         public static bool ShoulderPDA = true;
         public static string PDAReachZone = "Shoulder";
+        // Master switch for the VR sonar mod (ping ring + eye display control); off = 100% original game sonar
+        public static bool SonarModEnabled = false;
         // Which eye shows the screen sonar display (grid + object outlines) during a ping
-        public static string SonarPingEye = "Left Eye";
+        public static string SonarPingEye = "Both Eyes";
         public static float PDAHandAngleX = 0f;
         public static float PDAHandAngleY = 0f;
         public static float PDAHandAngleZ = 0f;
@@ -165,6 +167,7 @@ namespace SubmersedVR
 
             panel.AddHeading(tab, "Experimental");
             panel.AddToggleOption(tab, "Put hand reticle on laserpointer end", PutHandReticleOnLaserPointer, (value) => { PutHandReticleOnLaserPointer = value; PutHandReticleOnLaserPointerChanged(value); }, "Keeps the hand reticle at the hand and facing the view, so its text stays readable no matter how the tool model is held (e.g. the knife). Off keeps the fixed hand-mode rotation.");
+            panel.AddToggleOption(tab, "Sonar Ping Mod (VR)", SonarModEnabled, (value) => { SonarModEnabled = value; }, "World-anchored ping ring and eye display control for the sonar. Off keeps the 100% original game sonar.");
             panel.AddChoiceOption<string>(tab, "Sonar Ping Eye", new string[] { "Both Eyes", "Left Eye", "Right Eye" }, SonarPingEye, (value) => { SonarPingEye = value; }, "During a sonar ping, which eye shows the screen sonar grid + object outlines. One eye removes the double-grid stereo artifact in VR (the game's grid is centered between the two eyes).");
             panel.AddToggleOption(tab, "Invert Y Axis in Seamoth/Cameras", InvertYAxis, (value) => { InvertYAxis = value; InvertYAxisChanged(value); }, "Enables Y axis inversion for Seamoth and Cameras.");
             //panel.AddToggleOption(tab, "Enable Particle Fix", EnableParticleFix, (value) => { EnableParticleFix = value; }, "Enables Particle Optimizations.");

@@ -39,6 +39,34 @@ namespace SubmersedVR
             }
             return SteamVR_Actions.subnautica.UIScroll.GetAxis(SteamVR_Input_Sources.Any);
         }
+
+        // True while the game has us in a camera view (Cyclops external cameras or a map room drone)
+        internal static bool IsInCameraMode()
+        {
+            var stack = InputHandlerStack.main;
+            if (stack != null && stack.stack != null)
+            {
+                foreach (var wrapper in stack.stack)
+                {
+                    if (wrapper != null && wrapper.handler is CyclopsExternalCams cams && cams.active)
+                    {
+                        return true;
+                    }
+                }
+            }
+            var cameras = MapRoomCamera.cameras;
+            if (cameras != null)
+            {
+                foreach (var camera in cameras)
+                {
+                    if (camera != null && camera.active)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
     }
 
     // Implement Snap turning for the player
@@ -79,6 +107,15 @@ namespace SubmersedVR
 
             String actionName = action.ToString();
             __result = SteamVR_Input.GetStateDown(actionName, SteamVR_Input_Sources.Any);
+            // Camera cycle actions only act while in a camera view, so they never touch the tool cycle
+            if (action == GameInput.Button.CycleNext && SteamVrGameInput.IsInCameraMode())
+            {
+                __result |= SteamVR_Input.GetStateDown("CameraCycleNext", SteamVR_Input_Sources.Any);
+            }
+            else if (action == GameInput.Button.CyclePrev && SteamVrGameInput.IsInCameraMode())
+            {
+                __result |= SteamVR_Input.GetStateDown("CameraCyclePrev", SteamVR_Input_Sources.Any);
+            }
             return false;
         }
     }
@@ -95,6 +132,14 @@ namespace SubmersedVR
 
             String actionName = action.ToString();
             __result = SteamVR_Input.GetStateUp(actionName, SteamVR_Input_Sources.Any);
+            if (action == GameInput.Button.CycleNext && SteamVrGameInput.IsInCameraMode())
+            {
+                __result |= SteamVR_Input.GetStateUp("CameraCycleNext", SteamVR_Input_Sources.Any);
+            }
+            else if (action == GameInput.Button.CyclePrev && SteamVrGameInput.IsInCameraMode())
+            {
+                __result |= SteamVR_Input.GetStateUp("CameraCyclePrev", SteamVR_Input_Sources.Any);
+            }
             return false;
         }
     }
@@ -111,6 +156,14 @@ namespace SubmersedVR
 
             String actionName = action.ToString();
             __result = SteamVR_Input.GetState(actionName, SteamVR_Input_Sources.Any);
+            if (action == GameInput.Button.CycleNext && SteamVrGameInput.IsInCameraMode())
+            {
+                __result |= SteamVR_Input.GetState("CameraCycleNext", SteamVR_Input_Sources.Any);
+            }
+            else if (action == GameInput.Button.CyclePrev && SteamVrGameInput.IsInCameraMode())
+            {
+                __result |= SteamVR_Input.GetState("CameraCyclePrev", SteamVR_Input_Sources.Any);
+            }
             return false;
         }
     }

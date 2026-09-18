@@ -106,15 +106,18 @@ namespace SubmersedVR
             }
 
             String actionName = action.ToString();
-            __result = SteamVR_Input.GetStateDown(actionName, SteamVR_Input_Sources.Any);
-            // Camera cycle actions only act while in a camera view, so they never touch the tool cycle
+            // In camera mode the camera cycle actions replace the tool cycle actions
             if (action == GameInput.Button.CycleNext && SteamVrGameInput.IsInCameraMode())
             {
-                __result |= SteamVR_Input.GetStateDown("CameraCycleNext", SteamVR_Input_Sources.Any);
+                __result = SteamVR_Input.GetStateDown("CameraCycleNext", SteamVR_Input_Sources.Any);
             }
             else if (action == GameInput.Button.CyclePrev && SteamVrGameInput.IsInCameraMode())
             {
-                __result |= SteamVR_Input.GetStateDown("CameraCyclePrev", SteamVR_Input_Sources.Any);
+                __result = SteamVR_Input.GetStateDown("CameraCyclePrev", SteamVR_Input_Sources.Any);
+            }
+            else
+            {
+                __result = SteamVR_Input.GetStateDown(actionName, SteamVR_Input_Sources.Any);
             }
             return false;
         }
@@ -131,14 +134,17 @@ namespace SubmersedVR
             }
 
             String actionName = action.ToString();
-            __result = SteamVR_Input.GetStateUp(actionName, SteamVR_Input_Sources.Any);
             if (action == GameInput.Button.CycleNext && SteamVrGameInput.IsInCameraMode())
             {
-                __result |= SteamVR_Input.GetStateUp("CameraCycleNext", SteamVR_Input_Sources.Any);
+                __result = SteamVR_Input.GetStateUp("CameraCycleNext", SteamVR_Input_Sources.Any);
             }
             else if (action == GameInput.Button.CyclePrev && SteamVrGameInput.IsInCameraMode())
             {
-                __result |= SteamVR_Input.GetStateUp("CameraCyclePrev", SteamVR_Input_Sources.Any);
+                __result = SteamVR_Input.GetStateUp("CameraCyclePrev", SteamVR_Input_Sources.Any);
+            }
+            else
+            {
+                __result = SteamVR_Input.GetStateUp(actionName, SteamVR_Input_Sources.Any);
             }
             return false;
         }
@@ -155,14 +161,17 @@ namespace SubmersedVR
             }
 
             String actionName = action.ToString();
-            __result = SteamVR_Input.GetState(actionName, SteamVR_Input_Sources.Any);
             if (action == GameInput.Button.CycleNext && SteamVrGameInput.IsInCameraMode())
             {
-                __result |= SteamVR_Input.GetState("CameraCycleNext", SteamVR_Input_Sources.Any);
+                __result = SteamVR_Input.GetState("CameraCycleNext", SteamVR_Input_Sources.Any);
             }
             else if (action == GameInput.Button.CyclePrev && SteamVrGameInput.IsInCameraMode())
             {
-                __result |= SteamVR_Input.GetState("CameraCyclePrev", SteamVR_Input_Sources.Any);
+                __result = SteamVR_Input.GetState("CameraCyclePrev", SteamVR_Input_Sources.Any);
+            }
+            else
+            {
+                __result = SteamVR_Input.GetState(actionName, SteamVR_Input_Sources.Any);
             }
             return false;
         }

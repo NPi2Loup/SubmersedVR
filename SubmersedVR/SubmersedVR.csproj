@@ -27,7 +27,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- SteamVR + SteamVR Actions: Currenlty prebuilt, should be built from source later -->
+    <!-- SteamVR + SteamVR Actions: built from source in SteamVR/ActionsSrc (kept out of the mod's compilation) -->
+    <Compile Remove="SteamVR/ActionsSrc/**/*.cs" />
     <Reference Include="SteamVR">
       <HintPath>SteamVR/SteamVR.dll</HintPath>
       <Aliases>SteamVRRef</Aliases>

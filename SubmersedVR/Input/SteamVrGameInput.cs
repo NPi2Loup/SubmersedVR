@@ -67,6 +67,23 @@ namespace SubmersedVR
             }
             return false;
         }
+
+        // In camera mode the camera cycle actions replace the tool cycle actions
+        internal static string ResolveActionName(GameInput.Button action)
+        {
+            if (action == GameInput.Button.CycleNext || action == GameInput.Button.CyclePrev)
+            {
+                if (IsInCameraMode())
+                {
+                    if (action == GameInput.Button.CycleNext)
+                    {
+                        return SteamVR_Actions.subnautica.CameraCycleNext.GetShortName();
+                    }
+                    return SteamVR_Actions.subnautica.CameraCyclePrev.GetShortName();
+                }
+            }
+            return action.ToString();
+        }
     }
 
     // Implement Snap turning for the player
@@ -105,20 +122,7 @@ namespace SubmersedVR
                 return false;
             }
 
-            String actionName = action.ToString();
-            // In camera mode the camera cycle actions replace the tool cycle actions
-            if (action == GameInput.Button.CycleNext && SteamVrGameInput.IsInCameraMode())
-            {
-                __result = SteamVR_Input.GetStateDown("CameraCycleNext", SteamVR_Input_Sources.Any);
-            }
-            else if (action == GameInput.Button.CyclePrev && SteamVrGameInput.IsInCameraMode())
-            {
-                __result = SteamVR_Input.GetStateDown("CameraCyclePrev", SteamVR_Input_Sources.Any);
-            }
-            else
-            {
-                __result = SteamVR_Input.GetStateDown(actionName, SteamVR_Input_Sources.Any);
-            }
+            __result = SteamVR_Input.GetStateDown(SteamVrGameInput.ResolveActionName(action), SteamVR_Input_Sources.Any);
             return false;
         }
     }
@@ -133,19 +137,7 @@ namespace SubmersedVR
                 return false;
             }
 
-            String actionName = action.ToString();
-            if (action == GameInput.Button.CycleNext && SteamVrGameInput.IsInCameraMode())
-            {
-                __result = SteamVR_Input.GetStateUp("CameraCycleNext", SteamVR_Input_Sources.Any);
-            }
-            else if (action == GameInput.Button.CyclePrev && SteamVrGameInput.IsInCameraMode())
-            {
-                __result = SteamVR_Input.GetStateUp("CameraCyclePrev", SteamVR_Input_Sources.Any);
-            }
-            else
-            {
-                __result = SteamVR_Input.GetStateUp(actionName, SteamVR_Input_Sources.Any);
-            }
+            __result = SteamVR_Input.GetStateUp(SteamVrGameInput.ResolveActionName(action), SteamVR_Input_Sources.Any);
             return false;
         }
     }
@@ -160,19 +152,7 @@ namespace SubmersedVR
                 return false;
             }
 
-            String actionName = action.ToString();
-            if (action == GameInput.Button.CycleNext && SteamVrGameInput.IsInCameraMode())
-            {
-                __result = SteamVR_Input.GetState("CameraCycleNext", SteamVR_Input_Sources.Any);
-            }
-            else if (action == GameInput.Button.CyclePrev && SteamVrGameInput.IsInCameraMode())
-            {
-                __result = SteamVR_Input.GetState("CameraCyclePrev", SteamVR_Input_Sources.Any);
-            }
-            else
-            {
-                __result = SteamVR_Input.GetState(actionName, SteamVR_Input_Sources.Any);
-            }
+            __result = SteamVR_Input.GetState(SteamVrGameInput.ResolveActionName(action), SteamVR_Input_Sources.Any);
             return false;
         }
     }

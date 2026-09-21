@@ -1,53 +1,47 @@
 using HarmonyLib;
 using UnityEngine;
-using UnityEngine.Rendering;
 
 namespace SubmersedVR
 {
-    // World-anchored expanding wave ring on sonar pings. The game's sonar
-    // hologram (the Cyclops' radar disc + mini model) is left untouched:
-    // the camera-following grid the user sees is NOT drawn by its meshes
-    // (confirmed in-game: swapping all of them changed nothing) nor by a
-    // WBOIT overlay while it was visible. SonarOverlayBlock below stays as
-    // a probe: if the grid is a WBOIT overlay (like the scanner's
-    // FX/Scanning one), the log will name it on the next Seamoth test.
+    // Sonar ping state, mirrored from the game's own sonar button (shared
+    // Seamoth/Cyclops entry point + Cyclops button). The game's screen
+    // effect is left 100% untouched: the "legacy" selection shows it as-is,
+    // and the replacement screen effects (blue wave / 3D fixed) drive their
+    // timing and origin from the last ping.
     static class SonarWorldPing
     {
-        private const float MaxRadius = 10f;
-        private static readonly Color FallbackPingColor = new Color(0.253f, 0.593f, 0.662f, 0.196f);
-        private static readonly string[] AdditiveShaderNames =
-        {
-            "Legacy Shaders/Particles/Additive",
-            "Particles/Additive",
-            "Sprites/Default",
-            "UWE/Standard",
-            "Universal Render Pipeline/Particles/Unlit",
-            "Hidden/Universal Default"
-        };
-
-        static string additiveShaderName;
-        static Texture2D ringTexture;
-        static bool updateExceptionLogged;
-
-        // Ping wave (ring) state
+        // Ping state
         static bool hasPinged;
-        static float ringStartTime;
+        static float pingStartTime;
         static float duration;
         internal static float waveDuration = 5f;
         static Vector3 origin;
-        static GameObject ringGo;
-        static Material ringMat;
-        static float ringBaseAlpha;
 
-        // True while the ping wave is running: the game's screen effect
-        // (red grid + object outlines, the actual sonar readout) is only
-        // allowed during the ping, not persistently between pings
+        // True while the game's ping wave is running (the screen effects
+        // animate for `duration` seconds after a ping)
         internal static bool IsPinging
         {
             get
             {
-                return hasPinged && Time.time - ringStartTime < duration;
+                return hasPinged && Time.time - pingStartTime < duration;
             }
+        }
+
+        // Read by the screen-effect modules (the blue wave drives its timing
+        // and origin from the last ping)
+        internal static bool HasPinged
+        {
+            get { return hasPinged; }
+        }
+
+        internal static Vector3 LastOrigin
+        {
+            get { return origin; }
+        }
+
+        internal static float LastPingTime
+        {
+            get { return pingStartTime; }
         }
 
         public static void Trigger()
@@ -61,370 +55,18 @@ namespace SubmersedVR
             if (waveDuration <= 0f) return;
 
             // Both ping entry points fire on the same ping: ignore the second
-            if (hasPinged && Time.time - ringStartTime < 0.5f) return;
+            if (hasPinged && Time.time - pingStartTime < 0.5f) return;
 
             hasPinged = true;
-            ringStartTime = Time.time;
+            pingStartTime = Time.time;
             duration = waveDuration;
             origin = camTransform.position;
 
-            try
-            {
-                CreateRing(camTransform.position, camTransform.forward);
-                Mod.logger.LogInfo($"[SonarWorld] ping at origin={origin}");
-            }
-            catch (System.Exception e)
-            {
-                if (!updateExceptionLogged)
-                {
-                    updateExceptionLogged = true;
-                    Mod.logger.LogError($"[SonarWorld] Trigger exception: {e}");
-                }
-            }
-        }
-
-        public static void Update()
-        {
-            if (Mod.quitting) return;
-            if (!Settings.SonarModEnabled)
-            {
-                // Switched off mid-ping: drop the ring in flight and clear the
-                // ping state so re-enabling is not caught by the cooldown
-                // guard or a stale IsPinging window
-                DestroyRing();
-                hasPinged = false;
-                return;
-            }
-            try
-            {
-                // Expanding wave ring on each ping
-                if (ringGo != null && ringMat != null)
-                {
-                    float t = Time.time - ringStartTime;
-                    float s = MaxRadius * 2f * (t / duration);
-                    ringGo.transform.localScale = new Vector3(s, s, s);
-                    var c = ringMat.color;
-                    c.a = ringBaseAlpha * Mathf.Clamp01(1f - t / duration);
-                    ringMat.color = c;
-                    if (t > duration)
-                    {
-                        DestroyRing();
-                    }
-                }
-            }
-            catch (System.Exception e)
-            {
-                if (!updateExceptionLogged)
-                {
-                    updateExceptionLogged = true;
-                    Mod.logger.LogError($"[SonarWorld] Update exception: {e}");
-                }
-            }
-        }
-
-        static void CreateRing(Vector3 position, Vector3 camForward)
-        {
-            var shader = AdditiveShader();
-            if (shader == null) return;
-            ringGo = GameObject.CreatePrimitive(PrimitiveType.Quad);
-            ringGo.name = "SonarPingRing";
-            Object.Destroy(ringGo.GetComponent<Collider>());
-            // Offset along the frozen forward so the ring clears the camera
-            // near plane (a quad exactly at the camera is clipped)
-            ringGo.transform.position = position + camForward * 1f;
-            // Orientation frozen at ping time: the ring faces the camera rig
-            // as it was when the ping fired, so it stays put in world space
-            ringGo.transform.rotation = Quaternion.LookRotation(camForward, Vector3.up);
-            ringMat = new Material(shader);
-            ringMat.mainTexture = RingTexture();
-            ringMat.color = FallbackPingColor;
-            ringMat.renderQueue = 3100;
-            ringBaseAlpha = FallbackPingColor.a;
-            var ringRenderer = ringGo.GetComponent<Renderer>();
-            if (ringRenderer != null)
-            {
-                ringRenderer.sharedMaterial = ringMat;
-            }
-            ringGo.transform.localScale = new Vector3(0.01f, 0.01f, 0.01f);
-        }
-
-        static void DestroyRing()
-        {
-            if (ringMat != null)
-            {
-                Object.Destroy(ringMat);
-            }
-            if (ringGo != null)
-            {
-                Object.Destroy(ringGo);
-            }
-            ringGo = null;
-            ringMat = null;
-        }
-
-        // Probed on every ping (not cached): the first ping may happen
-        // before the additive shaders are loaded in-game
-        static Shader AdditiveShader()
-        {
-            Shader found = null;
-            foreach (var name in AdditiveShaderNames)
-            {
-                found = Shader.Find(name);
-                if (found != null) break;
-            }
-            if (found != null && additiveShaderName != found.name)
-            {
-                additiveShaderName = found.name;
-                Mod.logger.LogInfo($"[SonarWorld] additive shader={found.name}");
-            }
-            return found;
-        }
-
-        // 256x256 white ring band at the texture edge (radius ~124/128): the
-        // quad is scaled to 2x MaxRadius, so the visible ring reaches
-        // MaxRadius at the end of the wave
-        static Texture2D RingTexture()
-        {
-            if (ringTexture != null) return ringTexture;
-            ringTexture = new Texture2D(256, 256, TextureFormat.RGBA32, false);
-            ringTexture.name = "SonarRing";
-            float center = 127.5f;
-            for (int y = 0; y < 256; y++)
-            {
-                for (int x = 0; x < 256; x++)
-                {
-                    float dx = x + 0.5f - center;
-                    float dy = y + 0.5f - center;
-                    float d = Mathf.Sqrt(dx * dx + dy * dy);
-                    float a = 1f;
-                    if (d < 121f)
-                    {
-                        a = 1f - (121f - d) / 2f;
-                    }
-                    else if (d > 127f)
-                    {
-                        a = 1f - (d - 127f) / 2f;
-                    }
-                    a = Mathf.Clamp01(a);
-                    a = a * a * (3f - 2f * a);
-                    ringTexture.SetPixel(x, y, new Color(1f, 1f, 1f, a));
-                }
-            }
-            ringTexture.Apply();
-            return ringTexture;
-        }
-    }
-
-    // Probe on the WBOIT composite pass: logs every overlay that reaches the
-    // pass (and blocks the ones whose shader is sonar-named, in case the
-    // camera-following grid is one - the Seamoth sonar test will tell).
-    // The scanner's FX/Scanning overlay confirmed the mechanism exists.
-    [HarmonyPatch(typeof(VFXOverlayMaterial), nameof(VFXOverlayMaterial.FillBuffer))]
-    static class SonarOverlayBlock
-    {
-        static bool blockLogged;
-        static float otherOverlayLogTime;
-
-        [HarmonyPrefix]
-        static bool Prefix(VFXOverlayMaterial __instance, out bool __result)
-        {
-            __result = true;
-            if (!Settings.SonarModEnabled)
-            {
-                return true;
-            }
-            var mat = __instance != null ? __instance.material : null;
-            if (mat == null || mat.shader == null || mat.shader.name == null)
-            {
-                return true;
-            }
-            if (mat.shader.name.ToLowerInvariant().IndexOf("sonar") < 0)
-            {
-                // Diagnostics: list the other overlays the pass sees
-                if (Settings.IsDebugEnabled && Time.unscaledTime - otherOverlayLogTime > 60f)
-                {
-                    otherOverlayLogTime = Time.unscaledTime;
-                    Mod.logger.LogInfo($"[SonarWorld] overlay pass (not blocked): mat={mat.name} shader={mat.shader.name}");
-                }
-                return true;
-            }
-            if (!blockLogged)
-            {
-                blockLogged = true;
-                Mod.logger.LogInfo($"[SonarWorld] overlay blocked: mat={mat.name} shader={mat.shader.name}");
-            }
-            __result = false;
-            return false;
-        }
-    }
-
-    // The game draws the sonar grid + object outlines + ping wave as a
-    // screen-space image effect (OnRenderImage, "Image Effects/Sonar") over
-    // the whole stereo frame. Its vanishing point sits at the frame center -
-    // between the two eyes - so each eye sees it offset: the "double grid
-    // that follows the head" artifact. Postfix on the effect:
-    //  - between pings: the whole effect is erased (blit the clean image)
-    //  - during a ping: the effect is kept on ONE eye only (the clean right
-    //    half of the frame is blitted back over the effect), which removes
-    //    the double-grid artifact: the red grid + object outlines (the actual
-    //    sonar readout) stay, visible in the left eye
-    [HarmonyPatch(typeof(SonarScreenFX), nameof(SonarScreenFX.OnRenderImage))]
-    static class SonarScreenFXBlock
-    {
-        static bool logged;
-        static bool eraseFailed;
-        static CommandBuffer eraseBuffer;
-        static Mesh eraseMesh;
-        static Material eraseMaterial;
-        static string eraseShaderName;
-        // Per-eye rendering detection: the effect is called twice per frame
-        static int lastFrame;
-        static int callsThisFrame;
-        static bool perEyeDetected;
-        static bool pingDxLogged;
-
-        [HarmonyPostfix]
-        static void Postfix(RenderTexture source, RenderTexture destination)
-        {
-            // Off = 100% original game sonar: do not touch the effect at all
-            if (!Settings.SonarModEnabled)
-            {
-                return;
-            }
-            if (!logged)
-            {
-                logged = true;
-                Mod.logger.LogInfo($"[SonarWorld] screen sonar FX: ping-only, eye={Settings.SonarPingEye}");
-            }
-            int f = Time.frameCount;
-            if (f != lastFrame)
-            {
-                lastFrame = f;
-                callsThisFrame = 0;
-                pingDxLogged = false;
-            }
-            callsThisFrame++;
-            if (callsThisFrame >= 2)
-            {
-                perEyeDetected = true;
-            }
-            if (source == null || destination == null)
-            {
-                return;
-            }
-            if (SonarWorldPing.IsPinging && !pingDxLogged)
-            {
-                pingDxLogged = true;
-                Mod.logger.LogInfo($"[SonarWorld] fx RT: src={source.width}x{source.height} dst={destination.width}x{destination.height} calls/frame={callsThisFrame} perEye={perEyeDetected} eraseShader={eraseShaderName}");
-            }
-            if (!SonarWorldPing.IsPinging)
-            {
-                Graphics.Blit(source, destination);
-                return;
-            }
-            // Both eyes: keep the game's full (stereo-artifacted) display
-            if (Settings.SonarPingEye == "Both Eyes" || eraseFailed)
-            {
-                return;
-            }
-            if (eraseMaterial == null)
-            {
-                var shader = FindShader("Unlit/Texture", "Unlit/Transparent", "Sprites/Default");
-                if (shader == null)
-                {
-                    eraseFailed = true;
-                    Mod.logger.LogInfo("[SonarWorld] one-eye erase unavailable (no blit shader), keeping both eyes");
-                    return;
-                }
-                eraseShaderName = shader.name;
-                eraseMaterial = new Material(shader);
-                eraseMesh = BuildQuad();
-                eraseBuffer = new CommandBuffer();
-            }
-            if (perEyeDetected)
-            {
-                // Per-eye calls: first call = left eye, second = right eye;
-                // erase the full frame of the eye that must not see it
-                bool eraseThis = callsThisFrame == (Settings.SonarPingEye == "Right Eye" ? 1 : 2);
-                if (eraseThis)
-                {
-                    Graphics.Blit(source, destination);
-                }
-                return;
-            }
-            // Single-pass stereo: draw the clean source over the other half
-            // of the stereo frame (left eye = left half, right eye = right
-            // half). The command buffer matrices default to identity view
-            // and projection
-            eraseMaterial.mainTexture = source;
-            float tx = Settings.SonarPingEye == "Right Eye" ? -0.5f : 0.5f;
-            eraseBuffer.Clear();
-            eraseBuffer.SetViewProjectionMatrices(Matrix4x4.identity, Matrix4x4.identity);
-            eraseBuffer.SetRenderTarget(destination);
-            eraseBuffer.DrawMesh(eraseMesh, Matrix4x4.TRS(new Vector3(tx, 0f, 0f), Quaternion.identity, new Vector3(0.5f, 1f, 1f)), eraseMaterial);
-            Graphics.ExecuteCommandBuffer(eraseBuffer);
-        }
-
-        static Shader FindShader(params string[] names)
-        {
-            foreach (var name in names)
-            {
-                var found = Shader.Find(name);
-                if (found != null)
-                {
-                    return found;
-                }
-            }
-            return null;
-        }
-
-        // Full NDC quad: DrawMesh scales it to half width and offsets it to
-        // the half of the stereo frame that must be erased
-        static Mesh BuildQuad()
-        {
-            var m = new Mesh();
-            m.name = "SonarEraseQuad";
-            m.vertices = new Vector3[]
-            {
-                new Vector3(-1f, -1f, 0f),
-                new Vector3(1f, -1f, 0f),
-                new Vector3(1f, 1f, 0f),
-                new Vector3(-1f, 1f, 0f)
-            };
-            m.uv = new Vector2[]
-            {
-                new Vector2(0f, 0f),
-                new Vector2(1f, 0f),
-                new Vector2(1f, 1f),
-                new Vector2(0f, 1f)
-            };
-            m.triangles = new int[] { 0, 1, 2, 0, 2, 3 };
-            return m;
-        }
-    }
-
-    // Drives the world-anchored ping visual at the Update cadence
-    class SonarWorldPingDriver : MonoBehaviour
-    {
-        void Update()
-        {
-            SonarWorldPing.Update();
+            Mod.logger.LogInfo($"[SonarWorld] ping at origin={origin}");
         }
     }
 
     #region Patches
-
-    // Attach the ping driver to the camera rig (other postfixes on the same
-    // method already exist: the trace sampler, the PDA, ...)
-    [HarmonyPatch(typeof(VRCameraRig), nameof(VRCameraRig.SetupControllers))]
-    static class AttachSonarWorldPing
-    {
-        [HarmonyPostfix]
-        static void Postfix(VRCameraRig __instance)
-        {
-            __instance.gameObject.GetOrAddComponent<SonarWorldPingDriver>();
-        }
-    }
 
     // Sonar ping entry points (shared Seamoth/Cyclops + Cyclops button); both
     // fire on the same ping, Trigger has a cooldown guard

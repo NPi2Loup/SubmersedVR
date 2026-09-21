@@ -54,10 +54,25 @@ namespace SubmersedVR
 
         public static bool ShoulderPDA = true;
         public static string PDAReachZone = "Shoulder";
-        // Master switch for the VR sonar mod (ping ring + eye display control); off = 100% original game sonar
-        public static bool SonarModEnabled = false;
-        // Which eye shows the screen sonar display (grid + object outlines) during a ping
-        public static string SonarPingEye = "Both Eyes";
+        // v69: master switch for the VR sonar mod - kept in the code but
+        // NO LONGER offered in the app (the toggle was removed); forced on
+        // at startup (SonarEffectOptions.SanitizeModEnabled). The "legacy"
+        // selection = 100% original game behavior
+        public static bool SonarModEnabled = true;
+        // Which screen effect the sonar draws (v69: the ONLY remaining
+        // sonar setting - legacy / legacy (3D fixed) / blue wave)
+        public static string SonarScreenEffect = SonarEffectOptions.Wave;
+        // Edges effect (v58): world altitude interval of the topographic
+        // contour lines (m) - the "relief" readout, revealed by the same
+        // wave
+        public static float SonarEdgeInterval = 5f;
+        // Edges debug visualization: 0 = normal (wave reveal), 1 = contour
+        // lines ONLY with no wave reveal (always-on - isolates the contour
+        // layer from the ping timing), 2 = silhouettes ONLY, no reveal
+        public static float SonarEdgeDebugVis = 0f;
+        // Dev tool: what the stereo-fix shader draws instead of the grid
+        // (0=off 1=worldPos gradient 2=eye pass label 3=raw depth)
+        public static float SonarDebugVis = 0f;
         public static float PDAHandAngleX = 0f;
         public static float PDAHandAngleY = 0f;
         public static float PDAHandAngleZ = 0f;
@@ -124,6 +139,11 @@ namespace SubmersedVR
 
         internal static void AddMenu(uGUI_OptionsPanel panel)
         {
+            // v70: migrate persisted sonar values BEFORE the choice rows
+            // are built - with a saved old label the "Sonar screen effect"
+            // row would vanish (the panel is built at menu load, before the
+            // VR startup hook that used to run the migration)
+            SonarEffectOptions.Sanitize();
             int tab = panel.AddTab("Submersed VR");
 
             panel.AddHeading(tab, "Controls");
@@ -170,8 +190,13 @@ namespace SubmersedVR
             panel.AddHeading(tab, "Experimental");
             panel.AddToggleOption(tab, "Put hand reticle on laserpointer end", PutHandReticleOnLaserPointer, (value) => { PutHandReticleOnLaserPointer = value; PutHandReticleOnLaserPointerChanged(value); }, "Keeps the hand reticle at the hand and facing the view, so its text stays readable no matter how the tool model is held (e.g. the knife). Off keeps the fixed hand-mode rotation.");
             panel.AddToggleOption(tab, "Reticle: target info at the laser pointer", ReticlePointerSplit, (value) => { ReticlePointerSplit = value; }, "While aiming, moves the target action texts, icon and progress to the laser hit point. Off keeps the original game behavior: all reticle info at the hand.");
-            panel.AddToggleOption(tab, "Sonar Ping Mod (VR)", SonarModEnabled, (value) => { SonarModEnabled = value; }, "World-anchored ping ring and eye display control for the sonar. Off keeps the 100% original game sonar.");
-            panel.AddChoiceOption<string>(tab, "Sonar Ping Eye", new string[] { "Both Eyes", "Left Eye", "Right Eye" }, SonarPingEye, (value) => { SonarPingEye = value; }, "During a sonar ping, which eye shows the screen sonar grid + object outlines. One eye removes the double-grid stereo artifact in VR (the game's grid is centered between the two eyes).");
+            // v69: the sonar is a single choice in the app - which screen
+            // shader. legacy = 100% original look = pick "legacy". Everything else
+            // (master toggle, range, wave look, stereo debug vis) was
+            // frozen in the code (SonarScreenWave / SonarScreenShaderFixV2)
+            // and removed from the panel; the fields stay in Settings for
+            // the inert drivers (edges, rework, recompiled)
+            panel.AddChoiceOption<string>(tab, "Sonar screen effect", SonarEffectOptions.Visible, SonarScreenEffect, (value) => { SonarScreenEffect = value; SonarEffectOptions.ApplySelection(); }, "What the sonar draws on screen. legacy = the game's own effect, shown only during a ping (both eyes) - the 100% original look. legacy (3D fixed) = the game's grid, stereo-corrected per eye (no more double grid in VR). blue wave = a bright lagoon-blue sonar wave (additive glow) that sweeps the terrain and leaves a fading trail, revealing relief. The fixed/wave options need the sonar_resources bundle in StreamingAssets; without it they do nothing.");
             panel.AddToggleOption(tab, "Invert Y Axis in Seamoth/Cameras", InvertYAxis, (value) => { InvertYAxis = value; InvertYAxisChanged(value); }, "Enables Y axis inversion for Seamoth and Cameras.");
             //panel.AddToggleOption(tab, "Enable Particle Fix", EnableParticleFix, (value) => { EnableParticleFix = value; }, "Enables Particle Optimizations.");
 
@@ -304,6 +329,10 @@ namespace SubmersedVR
         public static void Postfix(GameSettings.ISerializer serializer)
         {
             Settings.Serialize(serializer);
+            // v70: migrate persisted sonar values as soon as they are
+            // loaded (old labels / a stuck "master off") - idempotent, and
+            // runs before the options panel builds its rows
+            SonarEffectOptions.Sanitize();
         }
     }
 

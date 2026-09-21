@@ -5,6 +5,8 @@
     <AssemblyName>SubmersedVR</AssemblyName>
     <Description>A VR Conversion Mod for Subnautica</Description>
     <Version>0.2.0</Version>
+    <!-- Suffixe du zip de build (-vNN) pour distinguer chaque build de test. Changer ici pour le prochain build. v2 = release publique (la numérotation de dev v33-v70 reste dans les docs .md du repo) -->
+    <ZipVersionSuffix>v2</ZipVersionSuffix>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <!-- NOTE: Preprocessor directive SV = SubmersedVR, BZ = Below Zero -->
@@ -57,13 +59,15 @@
     <Copy SourceFiles="@(InstallPlugin)" DestinationFolder="$(BuildDir)\BepInEx\plugins" />
     <Copy SourceFiles="StreamingAssets\Amplify\amplify_resources" DestinationFolder="@(StreamingFolder)" SkipUnchangedFiles="true"/>
     <Copy SourceFiles="StreamingAssets\Amplify\amplify_resources.manifest" DestinationFolder="@(StreamingFolder)" SkipUnchangedFiles="true"/>
+    <Copy SourceFiles="StreamingAssets\Sonar\sonar_resources" DestinationFolder="@(StreamingFolder)" SkipUnchangedFiles="true" Condition="Exists('StreamingAssets\Sonar\sonar_resources')"/>
+    <Copy SourceFiles="StreamingAssets\Sonar\sonar_resources.manifest" DestinationFolder="@(StreamingFolder)" SkipUnchangedFiles="true" Condition="Exists('StreamingAssets\Sonar\sonar_resources.manifest')"/>
     <Copy SourceFiles="StreamingAssets\SteamVR\actions.json" DestinationFolder="@(BindingsFolder)" SkipUnchangedFiles="true"/>
     <Copy SourceFiles="StreamingAssets\SteamVR\bindings_oculus_touch.json" DestinationFolder="@(BindingsFolder)" SkipUnchangedFiles="true"/>
     <Copy SourceFiles="StreamingAssets\SteamVR\bindings_knuckles.json" DestinationFolder="@(BindingsFolder)" SkipUnchangedFiles="true"/>
     <Copy SourceFiles="StreamingAssets\SteamVR\bindings_holographic.json" DestinationFolder="@(BindingsFolder)" SkipUnchangedFiles="true"/>
     <Copy SourceFiles="SteamVR\SteamVR.dll" DestinationFolder="@(ManagedFolder)" SkipUnchangedFiles="true"/>
     <Copy SourceFiles="SteamVR\SteamVR_Actions.dll" DestinationFolder="@(ManagedFolder)" SkipUnchangedFiles="true"/>
-    <ZipDirectory SourceDirectory="$(BuildDir)" DestinationFile="$(MSBuildProjectDirectory)\$(AssemblyName)_$(Version).zip" />
+    <ZipDirectory SourceDirectory="$(BuildDir)" DestinationFile="$(MSBuildProjectDirectory)\$(AssemblyName)_$(Version)-$(ZipVersionSuffix).zip" />
   </Target>
 
 </Project>

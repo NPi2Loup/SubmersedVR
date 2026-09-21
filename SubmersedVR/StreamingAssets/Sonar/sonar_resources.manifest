@@ -1,0 +1,18 @@
+ManifestFileVersion: 0
+CRC: 2381449629
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: ccd14c166e78b56c05415fc502d4be2c
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: 55d48f4ad9c3b13330b9eb5ee5686477
+HashAppended: 0
+ClassTypes:
+- Class: 48
+  Script: {instanceID: 0}
+SerializeReferenceClassIdentifiers: []
+Assets:
+- Assets/Sonar/SonarScreenStereoV2.shader
+- Assets/Sonar/SonarScreenWave.shader
+Dependencies: []

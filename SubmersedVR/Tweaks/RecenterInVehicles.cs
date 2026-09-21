@@ -49,7 +49,7 @@ namespace SubmersedVR
     {
         public static void Postfix()
         {
-            VRUtil.Recenter();
+            DelayedVehicleRecenter.Schedule();
         }
     }
 

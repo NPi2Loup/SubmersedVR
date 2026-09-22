@@ -79,6 +79,7 @@ namespace SubmersedVR
             var rig = VRCameraRig.instance;
             var dot = rig.laserPointerUI.pointerDot.transform;
             var handReticle = HandReticle.main.gameObject.WithParent(dot);
+            handReticle.GetOrAddComponent<Canvas>().worldCamera = rig.uiCamera;
             handReticle.transform.LookAt(rig.uiCamera.transform.position);
             handReticle.transform.localRotation = Quaternion.Euler(40, 0, 0);
             handReticle.transform.localPosition = new Vector3(0, -5, dot.localPosition.z);

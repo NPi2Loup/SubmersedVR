@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 
 namespace SubmersedVR
@@ -23,7 +24,8 @@ namespace SubmersedVR
             public Vector2 originalPivot;
             public Vector2 originalAnchoredPos;
             // Zone on the target canvas (0 = icon/donut, 1 = name, 2 = action);
-            // the Y comes from Settings (calibration sliders), re-applied per frame
+            // the Y (top of the block) comes from Settings (calibration
+            // sliders), re-applied per frame
             public int zone;
         }
 
@@ -171,11 +173,23 @@ namespace SubmersedVR
                         }
                         part.rt.SetParent(target, false);
                         part.rt.anchorMin = part.rt.anchorMax = new Vector2(0.5f, 0.5f);
-                        part.rt.pivot = new Vector2(0.5f, 0.5f);
+                        // Top-center pivot: the offset is the top of the block,
+                        // which grows downward like the game's own layout
+                        part.rt.pivot = new Vector2(0.5f, 1f);
                     }
-                    // Per-frame: the game may nudge the layout, and the
-                    // calibration sliders must move the parts live
+                    // Per-frame: the calibration sliders must move the parts
+                    // live, and the prefab layout that resizes the text blocks
+                    // does not run on this runtime canvas - own the height
                     part.rt.anchoredPosition = new Vector2(0f, ZoneY(part.zone));
+                    var tmp = part.rt.GetComponent<TextMeshProUGUI>();
+                    if (tmp != null && part.rt.gameObject.activeInHierarchy)
+                    {
+                        float h = tmp.preferredHeight;
+                        if (Mathf.Abs(part.rt.sizeDelta.y - h) > 0.01f)
+                        {
+                            part.rt.sizeDelta = new Vector2(part.rt.sizeDelta.x, h);
+                        }
+                    }
                 }
                 else if (part.rt.parent == target)
                 {

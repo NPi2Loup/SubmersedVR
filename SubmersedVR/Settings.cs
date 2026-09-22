@@ -37,10 +37,11 @@ namespace SubmersedVR
         // or only the target action info projected on the laser hit point while aiming
         public static string HandReticleMode = HandReticleModes.Legacy;
         public static event StringChanged HandReticleModeChanged;
-        // Target info mode layout tuning (temporary calibration sliders, -100..+100)
+        // Target info mode layout tuning (temporary calibration sliders, -100..+100);
+        // Y = top of the block (the block grows downward)
         public static float ReticleIconY = 26f;
-        public static float ReticleNameY = -34f;
-        public static float ReticleActionY = -56f;
+        public static float ReticleNameY = -49f;
+        public static float ReticleActionY = -87f;
 
         public static bool PutBarsOnWrist;
         public static event BooleanChanged PutBarsOnWristChanged;
@@ -217,8 +218,8 @@ namespace SubmersedVR
             panel.AddToggleOption(tab, "Debug Overlays", IsDebugEnabled, (value) => { IsDebugEnabled = value; IsDebugChanged(value); }, "Enables Debug Overlays and Logs.");
             panel.AddSliderOption(tab, "Knife Swing Speed Threshold", KnifeSwingSpeedThreshold, 2.0f, 5.0f, KnifeSwingSpeedThreshold, 0.1f, (value) => { KnifeSwingSpeedThreshold = value; }, SliderLabelMode.Float, "0.0", "Minimum controller speed (m/s) to trigger a knife swing.");
             panel.AddSliderOption(tab, "Reticle: icon Y", ReticleIconY, -100f, 100f, ReticleIconY, 1f, (value) => { ReticleIconY = value; }, SliderLabelMode.Float, "0", "Target info reticle mode: vertical position of the action icon and progress donut. Up is positive.");
-            panel.AddSliderOption(tab, "Reticle: name Y", ReticleNameY, -100f, 100f, ReticleNameY, 1f, (value) => { ReticleNameY = value; }, SliderLabelMode.Float, "0", "Target info reticle mode: vertical position of the object name.");
-            panel.AddSliderOption(tab, "Reticle: action Y", ReticleActionY, -100f, 100f, ReticleActionY, 1f, (value) => { ReticleActionY = value; }, SliderLabelMode.Float, "0", "Target info reticle mode: vertical position of the action text (build/debuild/interact).");
+            panel.AddSliderOption(tab, "Reticle: name Y", ReticleNameY, -100f, 100f, ReticleNameY, 1f, (value) => { ReticleNameY = value; }, SliderLabelMode.Float, "0", "Target info reticle mode: top of the object name block (it grows downward).");
+            panel.AddSliderOption(tab, "Reticle: action Y", ReticleActionY, -100f, 100f, ReticleActionY, 1f, (value) => { ReticleActionY = value; }, SliderLabelMode.Float, "0", "Target info reticle mode: top of the action text block (build/debuild/ingredients, it grows downward).");
             panel.AddToggleOption(tab, "Always show controllers", AlwaysShowControllers, (value) => { AlwaysShowControllers = value; AlwaysShowControllersChanged(value); }, "Shows the controllers at all times.");
             //panel.AddToggleOption(tab, "Always show laserpointer", AlwaysShowLaserPointer, (value) => { AlwaysShowLaserPointer = value; AlwaysShowLaserPointerChanged(value); }, "Show the laserpointer at all times.");
 

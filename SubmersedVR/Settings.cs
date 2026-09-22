@@ -188,7 +188,7 @@ namespace SubmersedVR
             });
 
             panel.AddHeading(tab, "Experimental");
-            panel.AddToggleOption(tab, "Put hand reticle on laserpointer end", PutHandReticleOnLaserPointer, (value) => { PutHandReticleOnLaserPointer = value; PutHandReticleOnLaserPointerChanged(value); }, "Laser pointer reticle mode. The hand reticle stays at the hand, attached to the tool like the original game layout (it rotates with the tool). While aiming, the target action info is projected on the laser hit point (see the split option below). Off keeps all reticle info at the hand.");
+            panel.AddToggleOption(tab, "Laser pointer reticle mode", PutHandReticleOnLaserPointer, (value) => { PutHandReticleOnLaserPointer = value; PutHandReticleOnLaserPointerChanged(value); }, "The hand reticle stays at the hand, attached to the tool like the original game layout (it rotates with the tool). While aiming, the target action info is projected on the laser hit point (see the split option below). Off keeps all reticle info at the hand.");
             panel.AddToggleOption(tab, "Reticle: target info at the laser pointer", ReticlePointerSplit, (value) => { ReticlePointerSplit = value; }, "While aiming, moves the target action texts, icon and progress to the laser hit point. Off keeps the original game behavior: all reticle info at the hand.");
             // v69: the sonar is a single choice in the app - which screen
             // shader. legacy = 100% original look = pick "legacy". Everything else

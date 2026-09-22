@@ -4,12 +4,13 @@ using UnityEngine;
 namespace SubmersedVR
 {
     // Splits the hand reticle for laser pointer mode: the target action
-    // (compTextHand/HandSubscript, e.g. "Climb the ladder [A]") moves to a
-    // second world canvas that ReticleBillboard projects on the laser hit
-    // point, while the tool info (use texts, energy, progress, icons) stays
-    // on the root canvas at the hand. Split only registers the parts; all
-    // movement is driven per-frame by Enforce (see ReticleBillboard), which
-    // also honors the ReticlePointerSplit setting (off = original layout).
+    // (compTextHand/HandSubscript, e.g. "Climb the ladder [A]") and its icon
+    // and progress donut move to a second world canvas that ReticleBillboard
+    // projects on the laser hit point, while the tool info (use texts,
+    // energy) stays on the root canvas at the hand. Split only registers
+    // the parts; all movement is driven per-frame by Enforce (see
+    // ReticleBillboard), which also honors the ReticlePointerSplit setting
+    // (off = original layout).
     static class ReticleSplit
     {
         class MovedPart
@@ -28,6 +29,8 @@ namespace SubmersedVR
 
         static GameObject targetCanvasGo;
         static List<MovedPart> moved = new List<MovedPart>();
+        // Debug (Debug Overlays): cap on re-parent logs per split
+        static int reparentLogCount;
         // Reticle root currently split (null when unsplit); the VRCameraRig
         // watchdog re-applies the setup when a new reticle instance appears
         // (save/level load recreates it after VRHud.Setup already ran)
@@ -139,8 +142,6 @@ namespace SubmersedVR
         // AND the ReticlePointerSplit setting: true puts the parts on the
         // target canvas with the split layout, false puts them back on the
         // hand with the original layout (the setting off = original behavior)
-        static int reparentLogCount;
-
         public static void Enforce(bool aiming)
         {
             if (targetCanvasGo == null)

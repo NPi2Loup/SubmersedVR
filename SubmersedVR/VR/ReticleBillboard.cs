@@ -3,7 +3,7 @@ using UnityEngine;
 namespace SubmersedVR
 {
     // Keeps the hand reticle in laser pointer mode: the root canvas (tool
-    // texts + energy + icons) stays anchored at the hand with its legacy
+    // texts + energy) stays anchored at the hand with its legacy
     // fixed orientation (it rotates with the tool); the target action info
     // is split onto a second canvas (ReticleSplit) which is projected per
     // frame on the laser hit point, oriented to stay readable (perpendicular
@@ -51,7 +51,7 @@ namespace SubmersedVR
                 return;
             }
 
-            // The root always stays at the hand (tool texts + icons live there)
+            // The root always stays at the hand (tool texts + energy live there)
             transform.localPosition = AnchorOffset;
             transform.localScale = AnchorScale;
 

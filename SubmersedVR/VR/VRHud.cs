@@ -55,9 +55,10 @@ namespace SubmersedVR
             {
                 SetupHandReticleOnHand();
             }
-            // Target info mode: the target canvas is projected on the hit
-            // point per frame; the other modes only anchor the reticle
-            HandReticle.main.gameObject.GetOrAddComponent<ReticleBillboard>().enabled = mode == HandReticleModes.TargetInfo;
+            // Laser pointer modes: the target canvas is projected on the hit
+            // point per frame (target info), or the whole reticle is kept
+            // readable on the dot (dot)
+            HandReticle.main.gameObject.GetOrAddComponent<ReticleBillboard>().enabled = mode == HandReticleModes.TargetInfo || mode == HandReticleModes.PointerEnd;
         }
 
         public static void SetupHandReticleOnHand()
@@ -72,7 +73,8 @@ namespace SubmersedVR
             handReticle.transform.localScale = ReticleBillboard.AnchorScale;
         }
 
-        // The original WIP layout: the whole reticle follows the laser pointer dot
+        // The original WIP layout: the whole reticle follows the laser
+        // pointer dot; ReticleBillboard keeps it readable per frame
         public static void SetupHandReticleOnPointerDot()
         {
             ReticleSplit.Unsplit();
@@ -80,8 +82,6 @@ namespace SubmersedVR
             var dot = rig.laserPointerUI.pointerDot.transform;
             var handReticle = HandReticle.main.gameObject.WithParent(dot);
             handReticle.GetOrAddComponent<Canvas>().worldCamera = rig.uiCamera;
-            handReticle.transform.LookAt(rig.uiCamera.transform.position);
-            handReticle.transform.localRotation = Quaternion.Euler(40, 0, 0);
             handReticle.transform.localPosition = new Vector3(0, -5, dot.localPosition.z);
             handReticle.transform.localScale = dot.localScale * 2;
         }

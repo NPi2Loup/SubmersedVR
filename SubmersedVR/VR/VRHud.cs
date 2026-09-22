@@ -100,12 +100,6 @@ namespace SubmersedVR
             SetupHandReticle(onLaserPointer);
         }
 
-        // Re-splits the reticle so the progress donut follows the new setting
-        public static void OnReticleProgressSettingChanged(bool atPointer)
-        {
-            OnHandReticleSettingChanged(Settings.PutHandReticleOnLaserPointer);
-        }
-
         public static Canvas CreateWorldCanvas(this GameObject go)
         {
             Canvas canvas = go.AddComponent<Canvas>();
@@ -142,8 +136,6 @@ namespace SubmersedVR
             SetupHandReticle(Settings.PutHandReticleOnLaserPointer);
             Settings.PutHandReticleOnLaserPointerChanged -= OnHandReticleSettingChanged;
             Settings.PutHandReticleOnLaserPointerChanged += OnHandReticleSettingChanged;
-            Settings.ReticleProgressAtPointerChanged -= OnReticleProgressSettingChanged;
-            Settings.ReticleProgressAtPointerChanged += OnReticleProgressSettingChanged;
 
             WristHud.Setup();
 

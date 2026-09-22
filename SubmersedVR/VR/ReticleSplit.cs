@@ -24,8 +24,7 @@ namespace SubmersedVR
             public Vector2 originalPivot;
             public Vector2 originalAnchoredPos;
             // Zone on the target canvas (0 = icon/donut, 1 = name, 2 = action);
-            // the Y (top of the block) comes from Settings (calibration
-            // sliders), re-applied per frame
+            // the Y (top of the block) is re-applied per frame
             public int zone;
         }
 
@@ -110,9 +109,11 @@ namespace SubmersedVR
             RegisterPart(HandReticle.main.compTextHandSubscript, 2);
         }
 
+        // Target canvas layout, top of each block (the blocks grow downward);
+        // values calibrated in game against the original hand layout
         static float ZoneY(int zone)
         {
-            return zone == 0 ? Settings.ReticleIconY : zone == 1 ? Settings.ReticleNameY : Settings.ReticleActionY;
+            return zone == 0 ? 20f : zone == 1 ? -20f : -55f;
         }
 
         // Captures the original layout for RestorePart and the split zone
@@ -177,9 +178,9 @@ namespace SubmersedVR
                         // which grows downward like the game's own layout
                         part.rt.pivot = new Vector2(0.5f, 1f);
                     }
-                    // Per-frame: the calibration sliders must move the parts
-                    // live, and the prefab layout that resizes the text blocks
-                    // does not run on this runtime canvas - own the height
+                    // Per-frame: the prefab layout that resizes the text
+                    // blocks does not run on this runtime canvas - own the
+                    // position and the height
                     part.rt.anchoredPosition = new Vector2(0f, ZoneY(part.zone));
                     var tmp = part.rt.GetComponent<TextMeshProUGUI>();
                     if (tmp != null && part.rt.gameObject.activeInHierarchy)

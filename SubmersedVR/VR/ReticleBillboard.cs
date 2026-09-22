@@ -56,9 +56,9 @@ namespace SubmersedVR
             transform.localScale = AnchorScale;
 
             var laser = rig.laserPointerUI;
-            // Setting off or no world target (e.g. build mode): the parts
-            // stay on the hand with the original layout, all info visible
-            bool aiming = Settings.ReticlePointerSplit && rig.HasWorldTarget() && laser != null;
+            // No world target (e.g. build mode): the parts stay on the hand
+            // with the original layout, all info visible
+            bool aiming = rig.HasWorldTarget() && laser != null;
 
             ReticleSplit.Enforce(aiming);
 

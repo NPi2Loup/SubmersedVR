@@ -374,11 +374,12 @@ namespace SubmersedVR
 
             // HandReticle is recreated on save/level load, possibly after
             // VRHud.Setup already ran (the split was then skipped): re-apply
-            // the laser pointer setup whenever a new reticle instance shows
-            if (Settings.PutHandReticleOnLaserPointer && HandReticle.main != null
+            // the target info setup whenever a new reticle instance shows
+            if (Settings.HandReticleMode == Settings.HandReticleModeTargetInfo
+                && HandReticle.main != null
                 && ReticleSplit.SplitRoot != HandReticle.main.transform)
             {
-                VRHud.SetupHandReticle(true);
+                VRHud.SetupHandReticle(Settings.HandReticleMode);
             }
         }
 

@@ -10,6 +10,7 @@ namespace SubmersedVR
     {
         public delegate void BooleanChanged(bool newValue);
         public delegate void FloatChanged(float newValue);
+        public delegate void StringChanged(string newValue);
         public delegate void VoidChanged();
 
         public static bool IsSnapTurningEnabled;
@@ -32,11 +33,13 @@ namespace SubmersedVR
         //public static bool AlwaysShowLaserPointer;
         //public static event BooleanChanged AlwaysShowLaserPointerChanged;
 
-        public static bool PutHandReticleOnLaserPointer;
-        public static event BooleanChanged PutHandReticleOnLaserPointerChanged;
-
-        // Split the target action info (texts, icon, progress) to the laser hit point; off = original all-at-hand layout
-        public static bool ReticlePointerSplit = true;
+        // Hand reticle mode: legacy (all info at the hand), the whole reticle on the laser pointer dot,
+        // or only the target action info projected on the laser hit point while aiming
+        public const string HandReticleModeLegacy = "Legacy hand reticle";
+        public const string HandReticleModePointerEnd = "Put hand reticle on laserpointer end";
+        public const string HandReticleModeTargetInfo = "Put target info on laserpointer end";
+        public static string HandReticleMode = HandReticleModeLegacy;
+        public static event StringChanged HandReticleModeChanged;
 
         public static bool PutBarsOnWrist;
         public static event BooleanChanged PutBarsOnWristChanged;
@@ -188,8 +191,7 @@ namespace SubmersedVR
             });
 
             panel.AddHeading(tab, "Experimental");
-            panel.AddToggleOption(tab, "Laser pointer reticle mode", PutHandReticleOnLaserPointer, (value) => { PutHandReticleOnLaserPointer = value; PutHandReticleOnLaserPointerChanged(value); }, "The hand reticle stays at the hand, attached to the tool like the original game layout (it rotates with the tool). While aiming, the target action info is projected on the laser hit point (see the split option below). Off keeps all reticle info at the hand.");
-            panel.AddToggleOption(tab, "Reticle: target info at the laser pointer", ReticlePointerSplit, (value) => { ReticlePointerSplit = value; }, "While aiming, moves the target action texts, icon and progress to the laser hit point. Off keeps the original game behavior: all reticle info at the hand.");
+            panel.AddChoiceOption<string>(tab, "Hand reticle mode", new string[] { HandReticleModeLegacy, HandReticleModePointerEnd, HandReticleModeTargetInfo }, HandReticleMode, (value) => { HandReticleMode = value; HandReticleModeChanged(value); }, "Legacy hand reticle: all reticle info at the hand, original layout. Put hand reticle on laserpointer end: the whole reticle follows the laser pointer dot (hidden with it when there is no target). Put target info on laserpointer end: while aiming, the target action texts, icon and progress are projected on the laser hit point, the rest stays at the hand.");
             // v69: the sonar is a single choice in the app - which screen
             // shader. legacy = 100% original look = pick "legacy". Everything else
             // (master toggle, range, wave look, stereo debug vis) was

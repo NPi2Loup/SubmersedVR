@@ -3,14 +3,13 @@ using UnityEngine;
 
 namespace SubmersedVR
 {
-    // Splits the hand reticle for laser pointer mode: the target action
-    // (compTextHand/HandSubscript, e.g. "Climb the ladder [A]") and its icon
-    // and progress donut move to a second world canvas that ReticleBillboard
-    // projects on the laser hit point, while the tool info (use texts,
-    // energy) stays on the root canvas at the hand. Split only registers
-    // the parts; all movement is driven per-frame by Enforce (see
-    // ReticleBillboard), which also honors the ReticlePointerSplit setting
-    // (off = original layout).
+    // Splits the hand reticle for the target info reticle mode: the target
+    // action (compTextHand/HandSubscript, e.g. "Climb the ladder [A]") and
+    // its icon and progress donut move to a second world canvas that
+    // ReticleBillboard projects on the laser hit point, while the tool info
+    // (use texts, energy) stays on the root canvas at the hand. Split only
+    // registers the parts; all movement is driven per-frame by Enforce (see
+    // ReticleBillboard), which is only active in that reticle mode.
     static class ReticleSplit
     {
         class MovedPart
@@ -138,10 +137,9 @@ namespace SubmersedVR
 
         // The game re-parents the primary action text to its icon every frame
         // (icon-driven layout), so the split must be re-asserted per frame.
-        // Called from ReticleBillboard.LateUpdate with aiming = world target
-        // AND the ReticlePointerSplit setting: true puts the parts on the
-        // target canvas with the split layout, false puts them back on the
-        // hand with the original layout (the setting off = original behavior)
+        // Called from ReticleBillboard.LateUpdate with aiming = world target:
+        // true puts the parts on the target canvas with the split layout,
+        // false puts them back on the hand with the original layout
         public static void Enforce(bool aiming)
         {
             if (targetCanvasGo == null)

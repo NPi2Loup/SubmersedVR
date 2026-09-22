@@ -2,15 +2,13 @@ using TMPro;
 using UnityEngine;
 namespace SubmersedVR
 {
-    // Keeps the hand reticle readable in laser pointer mode. The root canvas
-    // (tool texts + energy + progress + icons) always stays anchored at the
-    // hand; the target action text is split onto a second canvas
-    // (ReticleSplit) which is projected on the laser hit point while aiming.
-    // Both are billboarded to
-    // the view, which fixes the original tool-dependent orientation (e.g. the
-    // knife is stored about 90 degrees turned in the hand, which rolled the
-    // reticle). The per-frame write must win against the game's own
-    // HandReticle.LateUpdate, hence DefaultExecutionOrder(1).
+    // Keeps the hand reticle in laser pointer mode: the root canvas (tool
+    // texts + energy + icons) stays anchored at the hand with its legacy
+    // fixed orientation (it rotates with the tool); the target action info
+    // is split onto a second canvas (ReticleSplit) which is projected per
+    // frame on the laser hit point, oriented to stay readable (perpendicular
+    // to the laser, world up). The per-frame write must win against the
+    // game's own HandReticle.LateUpdate, hence DefaultExecutionOrder(1).
     [DefaultExecutionOrder(1)]
     public class ReticleBillboard : MonoBehaviour
     {
@@ -64,20 +62,11 @@ namespace SubmersedVR
 
             ReticleSplit.Enforce(aiming);
 
-            // Plane perpendicular to the hand laser (world up), like the
-            // original mod's laser mode: the hand texts stay parallel to the
-            // pointed text, without following the head yaw; facing the view
-            // when there is no laser
-            if (laser != null)
-            {
-                transform.rotation = Quaternion.LookRotation(laser.transform.forward, Vector3.up);
-            }
-            else
-            {
-                transform.rotation = rig.uiCamera.transform.rotation;
-            }
-
-            // Project the split target-info canvas on the hit point while aiming
+            // The root keeps its legacy fixed orientation (set in
+            // SetupHandReticleLaserPointer): the tool texts rotate with the
+            // tool. Only the target canvas is oriented per frame, so the
+            // pointed info stays readable: plane perpendicular to the hand
+            // laser (world up) - aiming implies the laser exists
             var target = ReticleSplit.TargetCanvas;
             if (target != null)
             {
@@ -87,9 +76,9 @@ namespace SubmersedVR
                     target.localPosition = transform.InverseTransformPoint(hit);
                     // Effective world scale TargetScale, relative to the root (AnchorScale)
                     target.localScale = new Vector3(TargetScale.x / AnchorScale.x, TargetScale.y / AnchorScale.y, TargetScale.z / AnchorScale.z);
-                    // The root is already on the laser plane: the pointed text
-                    // is coplanar with the hand texts
-                    target.localRotation = Quaternion.identity;
+                    // World orientation independent of the tool rotation
+                    var desired = Quaternion.LookRotation(laser.transform.forward, Vector3.up);
+                    target.localRotation = Quaternion.Inverse(transform.rotation) * desired;
                     target.gameObject.SetActive(true);
                 }
                 else

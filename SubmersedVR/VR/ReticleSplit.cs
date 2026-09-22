@@ -26,8 +26,21 @@ namespace SubmersedVR
             public float splitY;
         }
 
+        // A part re-parented out of the icon canvas so it does not follow
+        // the icon to the hit point (progress donut when the setting is off)
+        class KeptPart
+        {
+            public RectTransform rt;
+            public Transform originalParent;
+            public Vector2 originalAnchorMin;
+            public Vector2 originalAnchorMax;
+            public Vector2 originalPivot;
+            public Vector2 originalAnchoredPos;
+        }
+
         static GameObject targetCanvasGo;
         static List<MovedPart> moved = new List<MovedPart>();
+        static List<KeptPart> kept = new List<KeptPart>();
         // Reticle root currently split (null when unsplit); the VRCameraRig
         // watchdog re-applies the setup when a new reticle instance appears
         // (save/level load recreates it after VRHud.Setup already ran)
@@ -88,18 +101,27 @@ namespace SubmersedVR
             // Like the original hand layout: icon on top, text below
             var iconRt = HandReticle.main.iconCanvas;
             RegisterPart(iconRt, 26f);
-            // The donut and % label: a child of the icon container follows
-            // the icon move, a sibling has to be registered on its own
-            foreach (var comp in new Component[] { HandReticle.main.progressImage, HandReticle.main.progressText })
+            // The progress donut and % label: a child of the icon container
+            // follows the icon move, a sibling has to be registered on its
+            // own. When the setting is off they stay on the tool: children
+            // of the icon are re-parented out, siblings are left alone
+            if (Settings.ReticleProgressAtPointer)
             {
-                if (comp == null)
+                foreach (var comp in new Component[] { HandReticle.main.progressImage, HandReticle.main.progressText })
                 {
-                    continue;
+                    if (comp == null)
+                    {
+                        continue;
+                    }
+                    if (!comp.transform.IsChildOf(iconRt))
+                    {
+                        RegisterPart(comp, 26f);
+                    }
                 }
-                if (!comp.transform.IsChildOf(iconRt))
-                {
-                    RegisterPart(comp, 26f);
-                }
+            }
+            else
+            {
+                KeepProgressOnTool(iconRt);
             }
             RegisterPart(HandReticle.main.compTextHand, -34f);
             RegisterPart(HandReticle.main.compTextHandSubscript, -56f);
@@ -130,6 +152,45 @@ namespace SubmersedVR
             if (Settings.IsDebugEnabled)
             {
                 Mod.logger.LogInfo($"[ReticleSplit] registered {rt.name}: anchors {rt.anchorMin}/{rt.anchorMax} pivot {rt.pivot} size {rt.sizeDelta} pos {rt.anchoredPosition}");
+            }
+        }
+
+        // Re-parents the progress container (a child of the icon canvas) onto
+        // the root canvas, keeping its on-screen position, so the donut stays
+        // on the tool instead of following the icon to the hit point
+        static void KeepProgressOnTool(Transform iconRt)
+        {
+            if (iconRt == null || iconRt.parent == null)
+            {
+                return;
+            }
+            foreach (var comp in new Component[] { HandReticle.main.progressImage, HandReticle.main.progressText })
+            {
+                if (comp == null)
+                {
+                    continue;
+                }
+                // Climb to the icon canvas direct child (the "Progress" container)
+                var t = comp.transform;
+                while (t != null && t.parent != iconRt)
+                {
+                    t = t.parent;
+                }
+                if (t == null)
+                {
+                    continue; // sibling of the icon, not re-parented by the split
+                }
+                var rt = (RectTransform)t;
+                kept.Add(new KeptPart
+                {
+                    rt = rt,
+                    originalParent = iconRt,
+                    originalAnchorMin = rt.anchorMin,
+                    originalAnchorMax = rt.anchorMax,
+                    originalPivot = rt.pivot,
+                    originalAnchoredPos = rt.anchoredPosition,
+                });
+                rt.SetParent(iconRt.parent, true);
             }
         }
 
@@ -206,6 +267,19 @@ namespace SubmersedVR
                 RestorePart(part);
             }
             moved.Clear();
+            // Back to the icon canvas once the icon itself is restored
+            foreach (var part in kept)
+            {
+                if (part.rt != null && part.originalParent != null)
+                {
+                    part.rt.SetParent(part.originalParent, false);
+                    part.rt.anchorMin = part.originalAnchorMin;
+                    part.rt.anchorMax = part.originalAnchorMax;
+                    part.rt.pivot = part.originalPivot;
+                    part.rt.anchoredPosition = part.originalAnchoredPos;
+                }
+            }
+            kept.Clear();
             splitRoot = null;
             if (targetCanvasGo != null)
             {

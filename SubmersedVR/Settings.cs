@@ -38,6 +38,10 @@ namespace SubmersedVR
         // Split the target action info (texts, icon, progress) to the laser hit point; off = original all-at-hand layout
         public static bool ReticlePointerSplit = true;
 
+        // With the split on, keep the progress donut and % at the laser hit point with the action icon; off = on the tool like the original layout
+        public static bool ReticleProgressAtPointer = true;
+        public static event BooleanChanged ReticleProgressAtPointerChanged;
+
         public static bool PutBarsOnWrist;
         public static event BooleanChanged PutBarsOnWristChanged;
 
@@ -188,8 +192,9 @@ namespace SubmersedVR
             });
 
             panel.AddHeading(tab, "Experimental");
-            panel.AddToggleOption(tab, "Put hand reticle on laserpointer end", PutHandReticleOnLaserPointer, (value) => { PutHandReticleOnLaserPointer = value; PutHandReticleOnLaserPointerChanged(value); }, "Keeps the hand reticle at the hand and facing the view, so its text stays readable no matter how the tool model is held (e.g. the knife). Off keeps the fixed hand-mode rotation.");
+            panel.AddToggleOption(tab, "Put hand reticle on laserpointer end", PutHandReticleOnLaserPointer, (value) => { PutHandReticleOnLaserPointer = value; PutHandReticleOnLaserPointerChanged(value); }, "Laser pointer reticle mode. The hand reticle stays at the hand, attached to the tool like the original game layout (it rotates with the tool). While aiming, the target action info is projected on the laser hit point (see the split option below). Off keeps all reticle info at the hand.");
             panel.AddToggleOption(tab, "Reticle: target info at the laser pointer", ReticlePointerSplit, (value) => { ReticlePointerSplit = value; }, "While aiming, moves the target action texts, icon and progress to the laser hit point. Off keeps the original game behavior: all reticle info at the hand.");
+            panel.AddToggleOption(tab, "Reticle: progress at the laser pointer", ReticleProgressAtPointer, (value) => { ReticleProgressAtPointer = value; ReticleProgressAtPointerChanged(value); }, "With the split on, moves the progress donut and % to the laser hit point with the action icon. Off keeps them on the tool, like the original layout.");
             // v69: the sonar is a single choice in the app - which screen
             // shader. legacy = 100% original look = pick "legacy". Everything else
             // (master toggle, range, wave look, stereo debug vis) was

@@ -51,7 +51,8 @@ namespace SubmersedVR
             {
                 SetupHandReticleOnHand();
             }
-            // Keep the reticle text upright (facing the HMD) in laser pointer mode only
+            // Laser pointer mode: the target canvas is projected on the hit
+            // point per frame; hand mode only anchors the reticle
             HandReticle.main.gameObject.GetOrAddComponent<ReticleBillboard>().enabled = onLaserPointer;
         }
 
@@ -70,10 +71,12 @@ namespace SubmersedVR
         public static void SetupHandReticleLaserPointer()
         {
             var rig = VRCameraRig.instance;
-            // Same anchor and size as hand mode (see SetupHandReticleOnHand);
-            // only the orientation is billboarded to the view per frame
-            // (ReticleBillboard)
+            // Same anchor, size and fixed orientation as hand mode: the
+            // reticle stays attached to the tool and rotates with it (legacy
+            // layout). ReticleBillboard only projects the split target canvas
+            // on the laser hit point per frame.
             var handReticle = HandReticle.main.gameObject.WithParent(rig.rightControllerUI.transform);
+            handReticle.transform.localEulerAngles = new Vector3(90, 0, 0);
             handReticle.transform.localPosition = ReticleBillboard.AnchorOffset;
             handReticle.transform.localScale = ReticleBillboard.AnchorScale;
             var canvas = handReticle.GetComponent<Canvas>();
@@ -95,6 +98,12 @@ namespace SubmersedVR
                 return;
             }
             SetupHandReticle(onLaserPointer);
+        }
+
+        // Re-splits the reticle so the progress donut follows the new setting
+        public static void OnReticleProgressSettingChanged(bool atPointer)
+        {
+            OnHandReticleSettingChanged(Settings.PutHandReticleOnLaserPointer);
         }
 
         public static Canvas CreateWorldCanvas(this GameObject go)
@@ -133,6 +142,8 @@ namespace SubmersedVR
             SetupHandReticle(Settings.PutHandReticleOnLaserPointer);
             Settings.PutHandReticleOnLaserPointerChanged -= OnHandReticleSettingChanged;
             Settings.PutHandReticleOnLaserPointerChanged += OnHandReticleSettingChanged;
+            Settings.ReticleProgressAtPointerChanged -= OnReticleProgressSettingChanged;
+            Settings.ReticleProgressAtPointerChanged += OnReticleProgressSettingChanged;
 
             WristHud.Setup();
 

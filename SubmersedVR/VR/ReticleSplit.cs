@@ -22,8 +22,9 @@ namespace SubmersedVR
             public Vector2 originalAnchorMax;
             public Vector2 originalPivot;
             public Vector2 originalAnchoredPos;
-            // Layout Y on the target canvas, re-applied by Enforce
-            public float splitY;
+            // Zone on the target canvas (0 = icon/donut, 1 = name, 2 = action);
+            // the Y comes from Settings (calibration sliders), re-applied per frame
+            public int zone;
         }
 
         static GameObject targetCanvasGo;
@@ -89,7 +90,7 @@ namespace SubmersedVR
             // tool info (use texts + energy) stays on the hand canvas.
             // Like the original hand layout: icon on top, text below
             var iconRt = HandReticle.main.iconCanvas;
-            RegisterPart(iconRt, 26f);
+            RegisterPart(iconRt, 0);
             // The progress donut and % label: a child of the icon container
             // follows the icon move, a sibling has to be registered on its own
             foreach (var comp in new Component[] { HandReticle.main.progressImage, HandReticle.main.progressText })
@@ -100,16 +101,21 @@ namespace SubmersedVR
                 }
                 if (!comp.transform.IsChildOf(iconRt))
                 {
-                    RegisterPart(comp, 26f);
+                    RegisterPart(comp, 0);
                 }
             }
-            RegisterPart(HandReticle.main.compTextHand, -34f);
-            RegisterPart(HandReticle.main.compTextHandSubscript, -56f);
+            RegisterPart(HandReticle.main.compTextHand, 1);
+            RegisterPart(HandReticle.main.compTextHandSubscript, 2);
         }
 
-        // Captures the original layout for RestorePart and the split layout
+        static float ZoneY(int zone)
+        {
+            return zone == 0 ? Settings.ReticleIconY : zone == 1 ? Settings.ReticleNameY : Settings.ReticleActionY;
+        }
+
+        // Captures the original layout for RestorePart and the split zone
         // for Enforce, without moving anything: Enforce places the parts
-        static void RegisterPart(Component comp, float y)
+        static void RegisterPart(Component comp, int zone)
         {
             if (comp == null)
             {
@@ -126,7 +132,7 @@ namespace SubmersedVR
                 originalAnchorMax = rt.anchorMax,
                 originalPivot = rt.pivot,
                 originalAnchoredPos = rt.anchoredPosition,
-                splitY = y,
+                zone = zone,
             };
             moved.Add(part);
             if (Settings.IsDebugEnabled)
@@ -155,20 +161,21 @@ namespace SubmersedVR
                 }
                 if (aiming)
                 {
-                    if (part.rt.parent == target)
+                    if (part.rt.parent != target)
                     {
-                        continue;
+                        if (Settings.IsDebugEnabled && reparentLogCount < 10)
+                        {
+                            reparentLogCount++;
+                            var gameParent = part.rt.parent != null ? part.rt.parent.name : "null";
+                            Mod.logger.LogInfo($"[ReticleSplit] Enforce: {part.rt.name} re-parented by game to {gameParent}, moving back to target");
+                        }
+                        part.rt.SetParent(target, false);
+                        part.rt.anchorMin = part.rt.anchorMax = new Vector2(0.5f, 0.5f);
+                        part.rt.pivot = new Vector2(0.5f, 0.5f);
                     }
-                    if (Settings.IsDebugEnabled && reparentLogCount < 10)
-                    {
-                        reparentLogCount++;
-                        var gameParent = part.rt.parent != null ? part.rt.parent.name : "null";
-                        Mod.logger.LogInfo($"[ReticleSplit] Enforce: {part.rt.name} re-parented by game to {gameParent}, moving back to target");
-                    }
-                    part.rt.SetParent(target, false);
-                    part.rt.anchorMin = part.rt.anchorMax = new Vector2(0.5f, 0.5f);
-                    part.rt.pivot = new Vector2(0.5f, 0.5f);
-                    part.rt.anchoredPosition = new Vector2(0f, part.splitY);
+                    // Per-frame: the game may nudge the layout, and the
+                    // calibration sliders must move the parts live
+                    part.rt.anchoredPosition = new Vector2(0f, ZoneY(part.zone));
                 }
                 else if (part.rt.parent == target)
                 {

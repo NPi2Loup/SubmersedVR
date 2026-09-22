@@ -43,11 +43,11 @@ namespace SubmersedVR
         public static void SetupHandReticle(string mode)
         {
             if (HandReticle.main == null) return;
-            if (mode == Settings.HandReticleModePointerEnd)
+            if (mode == HandReticleModes.PointerEnd)
             {
                 SetupHandReticleOnPointerDot();
             }
-            else if (mode == Settings.HandReticleModeTargetInfo)
+            else if (mode == HandReticleModes.TargetInfo)
             {
                 SetupHandReticleLaserPointer();
             }
@@ -57,7 +57,7 @@ namespace SubmersedVR
             }
             // Target info mode: the target canvas is projected on the hit
             // point per frame; the other modes only anchor the reticle
-            HandReticle.main.gameObject.GetOrAddComponent<ReticleBillboard>().enabled = mode == Settings.HandReticleModeTargetInfo;
+            HandReticle.main.gameObject.GetOrAddComponent<ReticleBillboard>().enabled = mode == HandReticleModes.TargetInfo;
         }
 
         public static void SetupHandReticleOnHand()

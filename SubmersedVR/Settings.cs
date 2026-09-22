@@ -35,10 +35,7 @@ namespace SubmersedVR
 
         // Hand reticle mode: legacy (all info at the hand), the whole reticle on the laser pointer dot,
         // or only the target action info projected on the laser hit point while aiming
-        public const string HandReticleModeLegacy = "Legacy hand reticle";
-        public const string HandReticleModePointerEnd = "Put hand reticle on laserpointer end";
-        public const string HandReticleModeTargetInfo = "Put target info on laserpointer end";
-        public static string HandReticleMode = HandReticleModeLegacy;
+        public static string HandReticleMode = HandReticleModes.Legacy;
         public static event StringChanged HandReticleModeChanged;
 
         public static bool PutBarsOnWrist;
@@ -191,7 +188,7 @@ namespace SubmersedVR
             });
 
             panel.AddHeading(tab, "Experimental");
-            panel.AddChoiceOption<string>(tab, "Hand reticle mode", new string[] { HandReticleModeLegacy, HandReticleModePointerEnd, HandReticleModeTargetInfo }, HandReticleMode, (value) => { HandReticleMode = value; HandReticleModeChanged(value); }, "Legacy hand reticle: all reticle info at the hand, original layout. Put hand reticle on laserpointer end: the whole reticle follows the laser pointer dot (hidden with it when there is no target). Put target info on laserpointer end: while aiming, the target action texts, icon and progress are projected on the laser hit point, the rest stays at the hand.");
+            panel.AddChoiceOption<string>(tab, "Hand reticle mode", new string[] { HandReticleModes.Legacy, HandReticleModes.PointerEnd, HandReticleModes.TargetInfo }, HandReticleMode, (value) => { HandReticleMode = value; HandReticleModeChanged(value); }, "Legacy hand reticle: all reticle info at the hand, original layout. Put hand reticle on laserpointer end: the whole reticle follows the laser pointer dot (hidden with it when there is no target). Put target info on laserpointer end: while aiming, the target action texts, icon and progress are projected on the laser hit point, the rest stays at the hand.");
             // v69: the sonar is a single choice in the app - which screen
             // shader. legacy = 100% original look = pick "legacy". Everything else
             // (master toggle, range, wave look, stereo debug vis) was
@@ -452,6 +449,15 @@ namespace SubmersedVR
         {
             __instance.SetAO(0);
         }
+    }
+
+    // Hand reticle mode labels; kept out of Settings, whose public static
+    // fields are all persisted by the reflection-based serializer
+    static class HandReticleModes
+    {
+        public const string Legacy = "Legacy hand reticle";
+        public const string PointerEnd = "Put hand reticle on laserpointer end";
+        public const string TargetInfo = "Put target info on laserpointer end";
     }
 
     #endregion

@@ -375,7 +375,7 @@ namespace SubmersedVR
             // HandReticle is recreated on save/level load, possibly after
             // VRHud.Setup already ran (the split was then skipped): re-apply
             // the target info setup whenever a new reticle instance shows
-            if (Settings.HandReticleMode == Settings.HandReticleModeTargetInfo
+            if (Settings.HandReticleMode == HandReticleModes.TargetInfo
                 && HandReticle.main != null
                 && ReticleSplit.SplitRoot != HandReticle.main.transform)
             {

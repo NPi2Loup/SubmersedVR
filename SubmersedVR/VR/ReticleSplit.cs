@@ -26,6 +26,9 @@ namespace SubmersedVR
             // Zone on the target canvas (0 = icon/donut, 1 = name, 2 = action);
             // the Y (top of the block) is re-applied per frame
             public int zone;
+            // Cached so Enforce does not GetComponent per frame (null on the
+            // icon container, which has no text of its own)
+            public TextMeshProUGUI tmp;
         }
 
         static GameObject targetCanvasGo;
@@ -71,7 +74,9 @@ namespace SubmersedVR
             var rootCanvas = root.GetComponent<Canvas>();
             if (rootCanvas != null)
             {
-                canvas.sortingOrder = rootCanvas.sortingOrder;
+                // One above the hand canvas so the projected info never
+                // fights it for draw order
+                canvas.sortingOrder = rootCanvas.sortingOrder + 1;
                 canvas.sortingLayerID = rootCanvas.sortingLayerID;
             }
             targetCanvasGo.layer = root.gameObject.layer;
@@ -136,6 +141,7 @@ namespace SubmersedVR
                 originalPivot = rt.pivot,
                 originalAnchoredPos = rt.anchoredPosition,
                 zone = zone,
+                tmp = rt.GetComponent<TextMeshProUGUI>(),
             };
             moved.Add(part);
             if (Settings.IsDebugEnabled)
@@ -182,10 +188,9 @@ namespace SubmersedVR
                     // blocks does not run on this runtime canvas - own the
                     // position and the height
                     part.rt.anchoredPosition = new Vector2(0f, ZoneY(part.zone));
-                    var tmp = part.rt.GetComponent<TextMeshProUGUI>();
-                    if (tmp != null && part.rt.gameObject.activeInHierarchy)
+                    if (part.tmp != null && part.rt.gameObject.activeInHierarchy)
                     {
-                        float h = tmp.preferredHeight;
+                        float h = part.tmp.preferredHeight;
                         if (Mathf.Abs(part.rt.sizeDelta.y - h) > 0.01f)
                         {
                             part.rt.sizeDelta = new Vector2(part.rt.sizeDelta.x, h);

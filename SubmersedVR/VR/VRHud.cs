@@ -20,6 +20,11 @@ namespace SubmersedVR
         private static Canvas staticHudCanvas = null;
         // private static OffsetCalibrationTool calibrationTool;
 
+        // Last reticle root a mode was applied to; the VRCameraRig watchdog
+        // re-applies the mode when a new reticle instance appears
+        // (save/level load recreates it after VRHud.Setup already ran)
+        public static Transform SetupReticle;
+
         // TODO: Hud Distance needs dedicated canvas, since the Pips seem to assume the 1 meter canvas distance.
 #if false
         public static float hudDistance = 1.0f;
@@ -55,6 +60,7 @@ namespace SubmersedVR
             {
                 SetupHandReticleOnHand();
             }
+            SetupReticle = HandReticle.main.transform;
             // Laser pointer modes: the target canvas is projected on the hit
             // point per frame (target info), or the whole reticle is kept
             // readable on the dot (dot)
@@ -79,7 +85,13 @@ namespace SubmersedVR
         {
             ReticleSplit.Unsplit();
             var rig = VRCameraRig.instance;
-            var dot = rig.laserPointerUI.pointerDot.transform;
+            // The laser pointer may not be set up yet (the VRCameraRig
+            // watchdog retries until it is)
+            var dot = rig.laserPointerUI?.pointerDot?.transform;
+            if (dot == null)
+            {
+                return;
+            }
             var handReticle = HandReticle.main.gameObject.WithParent(dot);
             handReticle.GetOrAddComponent<Canvas>().worldCamera = rig.uiCamera;
             handReticle.transform.localPosition = new Vector3(0, -5, dot.localPosition.z);

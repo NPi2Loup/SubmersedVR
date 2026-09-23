@@ -8,11 +8,12 @@ namespace SubmersedVR
     //   tool); the target action info is split onto a second canvas
     //   (ReticleSplit) which is projected per frame on the laser hit point,
     //   oriented to stay readable (perpendicular to the laser, world up).
-    // - dot: the whole reticle follows the laser pointer dot; the game keeps
-    //   the position (its LateUpdate writes localPosition.z), this component
-    //   keeps the orientation readable the same way.
-    // The per-frame write must win against the game's own HandReticle.
-    // LateUpdate, hence DefaultExecutionOrder(1).
+    // - dot: the whole reticle follows the laser pointer dot; the position
+    //   is set once at setup, this component keeps the orientation
+    //   readable the same way.
+    // The game's own HandReticle.LateUpdate also writes the reticle in XR,
+    // but that branch is disabled upstream (NoReticleMovementInVR), so the
+    // order relative to it does not matter.
     [DefaultExecutionOrder(1)]
     public class ReticleBillboard : MonoBehaviour
     {
@@ -73,7 +74,7 @@ namespace SubmersedVR
                         // Effective world scale TargetScale, relative to the root (AnchorScale)
                         target.localScale = new Vector3(TargetScale.x / AnchorScale.x, TargetScale.y / AnchorScale.y, TargetScale.z / AnchorScale.z);
                         // World orientation independent of the tool rotation
-                        var desired = Quaternion.LookRotation(laser.transform.forward, Vector3.up);
+                        var desired = ReadableRotation(laser.transform.forward);
                         target.localRotation = Quaternion.Inverse(transform.rotation) * desired;
                         target.gameObject.SetActive(true);
                     }
@@ -83,14 +84,16 @@ namespace SubmersedVR
                     }
                 }
             }
-            else if (laser != null && transform.parent == laser.pointerDot.transform)
+            else if (laser != null && laser.pointerDot != null && transform.parent == laser.pointerDot.transform)
             {
-                // Dot mode: the game keeps the position (its LateUpdate
-                // writes localPosition.z); keep the orientation readable per
-                // frame: plane perpendicular to the laser, world up (the
-                // dot inherits the tool rotation, the WIP one-shot
-                // orientation went stale when the tool moved)
-                transform.rotation = Quaternion.LookRotation(laser.transform.forward, Vector3.up);
+                // Dot mode: the position is set once in
+                // SetupHandReticleOnPointerDot (the game's LateUpdate z
+                // write is disabled by NoReticleMovementInVR); keep the
+                // orientation readable per frame: plane perpendicular to
+                // the laser, world up (the dot inherits the tool rotation,
+                // the WIP one-shot orientation went stale when the tool
+                // moved)
+                transform.rotation = ReadableRotation(laser.transform.forward);
             }
             else
             {
@@ -110,6 +113,14 @@ namespace SubmersedVR
         // and dumps the full child tree when the pointed object/action changes
         // (placeholder audit: the split must cover every element, incl. the
         // Count text and the craft material icons)
+        // Plane perpendicular to the laser, world up - with a fallback up
+        // when the laser points straight up/down (degenerate LookRotation)
+        static Quaternion ReadableRotation(Vector3 forward)
+        {
+            var up = Mathf.Abs(forward.y) > 0.999f ? Vector3.right : Vector3.up;
+            return Quaternion.LookRotation(forward, up);
+        }
+
         void LogTexts()
         {
             if (!Settings.IsDebugEnabled) return;

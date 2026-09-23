@@ -188,7 +188,7 @@ namespace SubmersedVR
             });
 
             panel.AddHeading(tab, "Experimental");
-            panel.AddChoiceOption<string>(tab, "Hand reticle mode", new string[] { HandReticleModes.Legacy, HandReticleModes.PointerEnd, HandReticleModes.TargetInfo }, HandReticleMode, (value) => { HandReticleMode = value; HandReticleModeChanged(value); }, "Legacy hand reticle: all reticle info at the hand, original layout. Put hand reticle on laserpointer end: the whole reticle follows the laser pointer dot (hidden with it when there is no target). Put target info on laserpointer end: while aiming, the target action texts, icon and progress are projected on the laser hit point, the rest stays at the hand.");
+            panel.AddChoiceOption<string>(tab, "Hand reticle mode", new string[] { HandReticleModes.Legacy, HandReticleModes.PointerEnd, HandReticleModes.TargetInfo }, HandReticleMode, (value) => { HandReticleMode = value; HandReticleModeChanged?.Invoke(value); }, "Legacy hand reticle: all reticle info at the hand, original layout. Put hand reticle on laserpointer end: the whole reticle follows the laser pointer dot (hidden with it when there is no target). Put target info on laserpointer end: while aiming, the target action texts, icon and progress are projected on the laser hit point, the rest stays at the hand.");
             // v69: the sonar is a single choice in the app - which screen
             // shader. legacy = 100% original look = pick "legacy". Everything else
             // (master toggle, range, wave look, stereo debug vis) was
@@ -332,6 +332,16 @@ namespace SubmersedVR
             // loaded (old labels / a stuck "master off") - idempotent, and
             // runs before the options panel builds its rows
             SonarEffectOptions.Sanitize();
+            // One-shot migration: the old experimental WIP toggle (upstream)
+            // mapped to the whole-reticle-on-pointer-end mode. On a load
+            // with that key set the mode is migrated; on a save it
+            // re-writes the orphan key to false (harmless, and only while
+            // the mode is still Legacy)
+            if (Settings.HandReticleMode == HandReticleModes.Legacy
+                && serializer.Serialize("SubmersedVR/PutHandReticleOnLaserPointer", false))
+            {
+                Settings.HandReticleMode = HandReticleModes.PointerEnd;
+            }
         }
     }
 

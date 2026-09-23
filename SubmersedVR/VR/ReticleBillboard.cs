@@ -69,7 +69,9 @@ namespace SubmersedVR
                 {
                     if (aiming)
                     {
-                        Vector3 hit = laser.transform.position + laser.transform.forward * rig.worldTargetDistance;
+                        // 5 cm past the hit point so the beam tip does not
+                        // touch the icon
+                        Vector3 hit = laser.transform.position + laser.transform.forward * (rig.worldTargetDistance + 0.05f);
                         target.localPosition = transform.InverseTransformPoint(hit);
                         // Effective world scale TargetScale, relative to the root (AnchorScale)
                         target.localScale = new Vector3(TargetScale.x / AnchorScale.x, TargetScale.y / AnchorScale.y, TargetScale.z / AnchorScale.z);

@@ -13,8 +13,6 @@ namespace SubmersedVR
     //                                        original) - isolates our launch path
     //   Blue wave + trail (experimental) -> a bright lagoon-blue sonar wave,
     //                                        additive (SonarScreenWave)
-    //   Edges reveal (experimental)      -> screen-space mesh edges + silhouettes
-    //                                        lit by the same ping front (SonarScreenEdges)
     //   Stereo fix: per-eye matrices     -> the game's effect, stereo-corrected (SonarScreenShaderFixV2, mode 2)
     //   Stereo fix: per-eye C2W only     -> (mode 1, diagnostic)
     //   Stereo fix: translation          -> (mode 0, the v32 prototype)
@@ -24,7 +22,6 @@ namespace SubmersedVR
         public const string Original = "legacy";
         public const string OriginalRecompiled = "Original (recompiled by us)";
         public const string Wave = "blue wave";
-        public const string Edges = "Edges reveal (experimental)";
         public const string FixPerEyeMatrices = "legacy (3D fixed)";
         public const string FixPerEyeRework = "Stereo fix: per-eye matrices (rework)";
         public const string FixPerEyeC2W = "Stereo fix: per-eye C2W only";
@@ -35,7 +32,6 @@ namespace SubmersedVR
             Original,
             OriginalRecompiled,
             Wave,
-            Edges,
             FixPerEyeMatrices,
             FixPerEyeRework,
             FixPerEyeC2W,
@@ -43,7 +39,7 @@ namespace SubmersedVR
         };
 
         // v63: the options OFFERED in the app. The rest (recompiled control,
-        // edges, rework, C2W-only, translation) stay fully in the code but
+        // rework, C2W-only, translation) stay fully in the code but
         // are not selectable anymore - their shaders may be dropped from
         // the bundle (the drivers stay inert when a shader is missing)
         public static readonly string[] Visible =
@@ -58,7 +54,6 @@ namespace SubmersedVR
         // dropped (no more wedges converging on the vanishing point)
         public const string V2ReworkShaderName = "SubmersedVR/SonarScreenStereoV2Rework";
         public const string WaveShaderName = "SubmersedVR/SonarScreenWave";
-        public const string EdgesShaderName = "SubmersedVR/SonarScreenEdges";
         // The legacy shader is a verbatim port of the game's effect; with
         // zero eye offsets (its material defaults) it IS the recompiled
         // original
@@ -67,11 +62,6 @@ namespace SubmersedVR
         public static bool IsWave(string s)
         {
             return s == Wave;
-        }
-
-        public static bool IsEdges(string s)
-        {
-            return s == Edges;
         }
 
         public static bool IsRecompiled(string s)
@@ -95,7 +85,7 @@ namespace SubmersedVR
         // only differs in shader + launch path
         public static bool IsReplacement(string s)
         {
-            return IsWave(s) || IsEdges(s) || IsFix(s);
+            return IsWave(s) || IsFix(s);
         }
 
         // v32.1 fix mode for the stereo-fix selections
@@ -118,7 +108,6 @@ namespace SubmersedVR
         {
             SonarScreenShaderFixV2.ApplyState();
             SonarScreenWave.ApplyState();
-            SonarScreenEdges.ApplyState();
             LogStatus();
         }
 
@@ -127,7 +116,7 @@ namespace SubmersedVR
         static bool startupLogged;
 
         // v63/v69: migrate a PERSISTED selection that is no longer offered
-        // in the app (old labels, edges, rework, recompiled, diag modes) to
+        // in the app (old labels, rework, recompiled, diag modes) to
         // one of the three current options, so the choice UI and the
         // drivers stay coherent. The old options' code is untouched
         public static void SanitizeSelection()
@@ -141,7 +130,6 @@ namespace SubmersedVR
             else if (sel == "Stereo fix: per-eye matrices (rework)") migrated = FixPerEyeMatrices;
             else if (sel == "Stereo fix: per-eye C2W only") migrated = FixPerEyeMatrices;
             else if (sel == "Stereo fix: translation (prototype)") migrated = FixPerEyeMatrices;
-            else if (sel == "Edges reveal (experimental)") migrated = Wave;
             if (migrated != null)
             {
                 Mod.logger.LogInfo($"[SonarFX] saved screen effect '{sel}' migrated to '{migrated}'");
@@ -150,8 +138,8 @@ namespace SubmersedVR
             }
             if (System.Array.IndexOf(Visible, sel) < 0)
             {
-                Mod.logger.LogInfo($"[SonarFX] saved screen effect '{sel}' is no longer offered - falling back to '{Wave}'");
-                Settings.SonarScreenEffect = Wave;
+                Mod.logger.LogInfo($"[SonarFX] saved screen effect '{sel}' is no longer offered - falling back to '{FixPerEyeMatrices}'");
+                Settings.SonarScreenEffect = FixPerEyeMatrices;
             }
         }
 
@@ -205,7 +193,7 @@ namespace SubmersedVR
             }
             else
             {
-                string shaderName = IsWave(sel) ? WaveShaderName : (IsEdges(sel) ? EdgesShaderName : (IsRecompiled(sel) ? LegacyShaderName : (IsRework(sel) ? V2ReworkShaderName : V2ShaderName)));
+                string shaderName = IsWave(sel) ? WaveShaderName : (IsRecompiled(sel) ? LegacyShaderName : (IsRework(sel) ? V2ReworkShaderName : V2ShaderName));
                 state = SonarBundle.GetShader(shaderName) != null ? "shader loaded" : "inert (sonar_resources bundle or shader missing)";
             }
             Mod.logger.LogInfo($"[SonarFX] screen effect: {sel} ({state})");

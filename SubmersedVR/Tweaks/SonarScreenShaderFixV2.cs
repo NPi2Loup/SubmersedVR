@@ -420,7 +420,6 @@ namespace SubmersedVR
         {
             SonarScreenShaderFixV2.OnQuit();
             SonarScreenWave.OnQuit();
-            SonarScreenEdges.OnQuit();
             SonarBundle.OnQuit();
         }
     }

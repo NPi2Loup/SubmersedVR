@@ -61,7 +61,7 @@ namespace SubmersedVR
         public static bool SonarModEnabled = true;
         // Which screen effect the sonar draws (v69: the ONLY remaining
         // sonar setting - legacy / legacy (3D fixed) / blue wave)
-        public static string SonarScreenEffect = SonarEffectOptions.Wave;
+        public static string SonarScreenEffect = SonarEffectOptions.FixPerEyeMatrices;
         // Edges effect (v58): world altitude interval of the topographic
         // contour lines (m) - the "relief" readout, revealed by the same
         // wave

@@ -23,6 +23,10 @@ namespace SubmersedVR
             public Vector2 originalAnchorMax;
             public Vector2 originalPivot;
             public Vector2 originalAnchoredPos;
+            // Zero when the part was registered inactive (the game collapses
+            // the rect while the text is empty) - Enforce then falls back to
+            // the text's natural width
+            public Vector2 originalSizeDelta;
             // Zone on the target canvas (0 = icon/donut, 1 = name, 2 = action);
             // the Y (top of the block) is re-applied per frame
             public int zone;
@@ -142,6 +146,7 @@ namespace SubmersedVR
                 originalAnchoredPos = rt.anchoredPosition,
                 zone = zone,
                 tmp = rt.GetComponent<TextMeshProUGUI>(),
+                originalSizeDelta = rt.sizeDelta,
             };
             moved.Add(part);
             if (Settings.IsDebugEnabled)
@@ -186,14 +191,17 @@ namespace SubmersedVR
                     }
                     // Per-frame: the prefab layout that resizes the text
                     // blocks does not run on this runtime canvas - own the
-                    // position and the height
+                    // position, the height and the width (a part registered
+                    // while inactive was captured at zero width and would
+                    // render nothing)
                     part.rt.anchoredPosition = new Vector2(0f, ZoneY(part.zone));
                     if (part.tmp != null && part.rt.gameObject.activeInHierarchy)
                     {
                         float h = part.tmp.preferredHeight;
-                        if (Mathf.Abs(part.rt.sizeDelta.y - h) > 0.01f)
+                        float w = part.originalSizeDelta.x > 0.5f ? part.originalSizeDelta.x : part.tmp.preferredWidth;
+                        if (Mathf.Abs(part.rt.sizeDelta.y - h) > 0.01f || Mathf.Abs(part.rt.sizeDelta.x - w) > 0.01f)
                         {
-                            part.rt.sizeDelta = new Vector2(part.rt.sizeDelta.x, h);
+                            part.rt.sizeDelta = new Vector2(w, h);
                         }
                     }
                 }

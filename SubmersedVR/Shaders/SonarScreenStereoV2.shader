@@ -1,35 +1,29 @@
-// Stereo-correct replacement for the game's "Image Effects/Sonar" screen
-// effect - v32.1 (multi-mode diagnostic version, the v32 test shader
-// SubmersedVR/SonarScreenStereo is kept untouched for comparison).
+// Stereo-corrected replacement for the game's "Image Effects/Sonar" screen
+// effect (the "legacy (3D fixed)" option).
 //
-// The fragment is a register-faithful port of the 2018 3Dmigoto replacement
-// of that same pass (3DMigoto hash 4e821607b4b7312e, byte-identical in the
-// 2018/2021/2024 fix archives). The depth linearization stays EXACTLY as
-// the game's (near/far clip planes are shared between the two eyes); only
-// the ray reconstruction (NDC -> view) and the view -> world transform are
-// swapped per mode:
+// A register-faithful port of the game's pass (the 2018 3DMigoto
+// replacement shader of that same pass, byte-identical in the
+// 2018/2021/2024 fix archives), with ONE correction: the world position
+// reconstruction is done PER EYE.
 //
-//   _FixMode 0 = Translation (prototype v32): center projection + center
-//                _Camera2World + per-eye world offset (+-
-//                stereoSeparation/2 along the camera right axis)
-//   _FixMode 1 = Per-eye C2W only (diagnostic): center projection +
-//                _EyeC2W (= GetStereoViewMatrix(eye).inverse) - isolates
-//                the pose error
-//   _FixMode 2 = Per-eye matrices (robust): _EyeProjTerms = (p00, p11,
-//                p02, p12) of GetStereoProjectionMatrix(eye) + _EyeC2W -
-//                full per-eye correction
+// Why: the game reconstructs every pixel's world position from the
+// per-eye depth buffer with the CENTER camera matrices, so in VR the
+// grid's vanishing point ends up between the two eyes (a double grid that
+// follows the head). The fix feeds the reconstruction the per-eye
+// projection terms (p00, p11, p02, p12 of Camera.GetStereoProjectionMatrix,
+// in _EyeProjTerms) and the per-eye view matrix inverse (the inverse of
+// Camera.GetStereoViewMatrix, in _EyeC2W). The depth linearization stays
+// EXACTLY as the game's (near/far clip planes are shared between the two
+// eyes).
 //
-// C# (SonarScreenShaderFixV2) sets _FixMode/_EyeC2W/_EyeProjTerms (and the
-// offsets for mode 0) on every OnRenderImage call, and logs the per-eye
-// projection terms + eye positions on each ping so the numerical verdict
-// (frustum asymmetry, center-vs-eye match, IPD) comes before the visual
-// check.
+// C# (SonarScreenShaderFixV2) sets _EyeC2W + _EyeProjTerms on every
+// OnRenderImage call. _SonarPingDistance is set globally by the game
+// (SonarScreenFX).
 //
 // Build: Unity 2019.4, asset bundle named "sonar_resources" (flat, next to
 // amplify_resources in StreamingAssets) containing this shader, platform
 // Windows 64. The mod looks the shader up by name
-// "SubmersedVR/SonarScreenStereoV2" (the v32 shader can be in the same
-// bundle; both are looked up by name).
+// "SubmersedVR/SonarScreenStereoV2".
 Shader "SubmersedVR/SonarScreenStereoV2"
 {
     Properties
@@ -38,10 +32,7 @@ Shader "SubmersedVR/SonarScreenStereoV2"
         // _CameraDepthTexture / _CameraGBufferTexture2 are built-in: the
         // engine auto-binds them to the declared samplers; a material
         // property with a default would override that binding
-        _EyeOffL ("Eye Offset (left half)", Vector) = (0, 0, 0, 0)
-        _EyeOffR ("Eye Offset (right half)", Vector) = (0, 0, 0, 0)
         _UseNormalGate ("Use GBuffer2 Normal Gate", Float) = 1.0
-        _FixMode ("Fix Mode (0=translation 1=eyeC2W 2=eyeMatrices)", Float) = 2.0
         _EyeProjTerms ("Eye Projection Terms (p00 p11 p02 p12)", Vector) = (0, 0, 0, 0)
     }
 
@@ -68,16 +59,10 @@ Shader "SubmersedVR/SonarScreenStereoV2"
 
             // Set globally by the game (SonarScreenFX, pingDistanceShaderID)
             uniform float _SonarPingDistance;
-            uniform float4 _EyeOffL;
-            uniform float4 _EyeOffR;
             uniform float _UseNormalGate;
-            // v32.1 multi-mode uniforms (set per render call by C#)
-            uniform float _FixMode;
+            // Per-eye projection terms (p00, p11, p02, p12), set every frame
+            // by C# from GetStereoProjectionMatrix(eye)
             uniform float4 _EyeProjTerms;
-            // Debug vis (set by C# from the "Sonar debug vis" setting):
-            // 0=off 1=worldPos gradient 2=eye pass label 3=raw depth
-            uniform float _FixDebug;
-            uniform float _DebugEye;
             // 4x4 matrix set with Material.SetMatrix; no Properties entry
             // needed (the uniform is registered by the shader)
             uniform float4x4 _EyeC2W;
@@ -111,23 +96,11 @@ Shader "SubmersedVR/SonarScreenStereoV2"
             {
                 float4 r0, r1, r2, r3;
 
-                // Debug vis 2 = per-pass eye label (left=red, right=blue)
-                if (_FixDebug > 1.5 && _FixDebug < 2.5)
-                {
-                    return float4(_DebugEye > 0.5 ? float3(0.0, 0.0, 1.0) : float3(1.0, 0.0, 0.0), 1.0);
-                }
-
                 // --- linearized depth (verbatim from the game shader;
                 // near/far are shared between the eyes, keep it untouched) ---
                 r0.x = _ProjectionParams.y * _ProjectionParams.z;
                 r0.yz = _ProjectionParams.zy + -_ProjectionParams.yz;
                 r1.xyzw = tex2D(_CameraDepthTexture, i.uv).xyzw;
-
-                // Debug vis 3 = raw depth (per-eye depth check)
-                if (_FixDebug > 2.5)
-                {
-                    return float4(r1.x, r1.x, r1.x, 1.0);
-                }
                 r0.w = 1 + -r1.x;
                 r0.yz = r0.ww * r0.yz + _ProjectionParams.yz;
                 r0.x = r0.x / r0.z;
@@ -139,17 +112,10 @@ Shader "SubmersedVR/SonarScreenStereoV2"
                 r0.y = 1 + -r0.x;
                 r0.y = unity_OrthoParams.w * r0.y + r0.x;
 
-                // --- projection terms: center (built-in) for modes 0/1,
-                // per-eye (sent by C# from GetStereoProjectionMatrix) for
-                // mode 2. _EyeProjTerms = (p00, p11, p02, p12) ---
-                float useEyeP = step(1.5, _FixMode);
-                float2 pOffset = unity_CameraProjection[2].xy;
-                float2 pScale = float2(unity_CameraProjection[0].x, unity_CameraProjection[1].y);
-                if (useEyeP > 0.5)
-                {
-                    pOffset = _EyeProjTerms.zw;
-                    pScale = float2(_EyeProjTerms.x, _EyeProjTerms.y);
-                }
+                // --- projection terms: PER EYE (sent by C# from
+                // GetStereoProjectionMatrix) ---
+                float2 pOffset = _EyeProjTerms.zw;
+                float2 pScale = float2(_EyeProjTerms.x, _EyeProjTerms.y);
 
                 // --- NDC -> view XY ---
                 r1.xy = i.uv * float2(2, 2) + float2(-1, -1);
@@ -158,30 +124,10 @@ Shader "SubmersedVR/SonarScreenStereoV2"
                 r2.xy = r1.xy / pScale;
                 r0.yz = r1.zw * r0.yy;
 
-                // --- view -> world: center _Camera2World for mode 0,
-                // _EyeC2W (= GetStereoViewMatrix(eye).inverse) for 1/2 ---
-                float useEyeC2W = step(0.5, _FixMode);
-                float useOffset = 1.0 - step(0.5, _FixMode);
+                // --- view -> world: PER EYE _EyeC2W (=
+                // GetStereoViewMatrix(eye).inverse, set by C#) ---
                 float3 viewPos = float3(r0.y, r0.z, -r0.x);
-                float3 worldPos = mul(unity_CameraToWorld, float4(viewPos, 1.0)).xyz;
-                if (useEyeC2W > 0.5)
-                {
-                    worldPos = mul(_EyeC2W, float4(viewPos, 1.0)).xyz;
-                }
-                // mode 0 only: per-eye world offset (the v32 prototype fix)
-                float3 eyeOff = (i.uv.x < 0.5) ? _EyeOffL.xyz : _EyeOffR.xyz;
-                worldPos = worldPos + useOffset * eyeOff;
-                r0.xyz = worldPos;
-
-                // Debug vis 1 = the reconstructed world position as a color
-                // gradient around the center camera. In VR: a smooth fused
-                // gradient that matches the real 3D = the reconstruction is
-                // per-eye coherent; a doubled/shifted gradient = the
-                // per-eye inconsistency, visible directly
-                if (_FixDebug > 0.5 && _FixDebug < 1.5)
-                {
-                    return float4((worldPos - unity_CameraToWorld[3].xyz) * 0.0667 + 0.5, 1.0);
-                }
+                r0.xyz = mul(_EyeC2W, float4(viewPos, 1.0)).xyz;
 
                 // --- world-space grid (verbatim) ---
                 r0.xyz = _Time.yyy * float3(0.300000012, 0.300000012, 0.300000012) + r0.xyz;
@@ -195,7 +141,7 @@ Shader "SubmersedVR/SonarScreenStereoV2"
                 r0.x = exp2(r0.x);
 
                 // --- facing gate: per-pixel ray direction (r2.xy is
-                // ndc/scale from above, so it follows the mode) ---
+                // ndc/scale from above, so it follows the eye) ---
                 r2.z = -1;
                 r0.z = dot(r2.xyz, r2.xyz);
                 r0.z = rsqrt(r0.z);

@@ -1,3 +1,4 @@
+using System;
 using HarmonyLib;
 using UnityEngine;
 
@@ -46,23 +47,39 @@ namespace SubmersedVR
 
         public static void Trigger()
         {
-            if (Mod.quitting) return;
-            if (!Settings.SonarModEnabled) return;
-            var root = SNCameraRoot.main;
-            if (root == null || root.mainCam == null) return;
-            var camTransform = root.mainCam.transform;
-            if (camTransform == null) return;
-            if (waveDuration <= 0f) return;
+            // Isolated: a throw here (a fake-null in CollectPieces, a
+            // destroyed chunk mid-dispose...) would abort the game's
+            // SonarPing chain exactly like the trace NRE did (log .46)
+            try
+            {
+                if (Mod.quitting) return;
+                if (!Settings.SonarModEnabled) return;
+                var root = SNCameraRoot.main;
+                if (root == null || root.mainCam == null) return;
+                var camTransform = root.mainCam.transform;
+                if (camTransform == null) return;
+                if (waveDuration <= 0f) return;
 
-            // Both ping entry points fire on the same ping: ignore the second
-            if (hasPinged && Time.time - pingStartTime < 0.5f) return;
+                // Both ping entry points fire on the same ping: ignore the
+                // second
+                if (hasPinged && Time.time - pingStartTime < 0.5f) return;
 
-            hasPinged = true;
-            pingStartTime = Time.time;
-            duration = waveDuration;
-            origin = camTransform.position;
+                hasPinged = true;
+                pingStartTime = Time.time;
+                duration = waveDuration;
+                origin = camTransform.position;
 
-            Mod.logger.LogInfo($"[SonarWorld] ping at origin={origin}");
+                // The hologram map (3D) starts on the same ping (the game's
+                // hologram shader on overlays of the real terrain) - gated
+                // on the 'hologram map (3D)' selection
+                SonarHoloMap.OnPing(origin);
+
+                Mod.logger.LogInfo($"[SonarWorld] ping at origin={origin}");
+            }
+            catch (Exception ex)
+            {
+                Mod.logger.LogError($"[SonarWorld] Trigger failed: {ex}");
+            }
         }
     }
 

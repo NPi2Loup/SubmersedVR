@@ -59,30 +59,52 @@ namespace SubmersedVR
         // at startup (SonarEffectOptions.SanitizeModEnabled). The "legacy"
         // selection = 100% original game behavior
         public static bool SonarModEnabled = true;
-        // Which screen effect the sonar draws (v69: the ONLY remaining
-        // sonar setting - legacy / legacy (3D fixed) / blue wave)
+        // Which screen effect the sonar draws: legacy / legacy (3D fixed) /
+        // blue wave / hologram map (3D)
         public static string SonarScreenEffect = SonarEffectOptions.FixPerEyeMatrices;
-        // Edges effect (v58): world altitude interval of the topographic
-        // contour lines (m) - the "relief" readout, revealed by the same
-        // wave
-        public static float SonarEdgeInterval = 5f;
-        // Edges debug visualization: 0 = normal (wave reveal), 1 = contour
-        // lines ONLY with no wave reveal (always-on - isolates the contour
-        // layer from the ping timing), 2 = silhouettes ONLY, no reveal
-        public static float SonarEdgeDebugVis = 0f;
-        // Dev tool: what the stereo-fix shader draws instead of the grid
-        // (0=off 1=worldPos gradient 2=eye pass label 3=raw depth)
-        public static float SonarDebugVis = 0f;
-        public static float PDAHandAngleX = 0f;
+        // --- Sonar Ping (SHARED: drives BOTH the screen blue wave and the
+        // holo floor, so the front stays synced by construction). The sweep
+        // (2.5 s), the front curves (Linear) and all the look parameters
+        // (wave trail/relief/attenuation, floor relief/scan/wireframe) are
+        // FROZEN in the code (SonarScreenWave / SonarHoloMap) - the user's
+        // final calibration, log .56 ---
+        public static float SonarPingRange = 450f;   // m, max range
+        // The shared sonar glow color (preset, see SonarPresetColor) -
+        // drives BOTH the floor hologram and the screen wave
+        public static string SonarColor = "Lagoon";
+
+        // VR fix for the precursor teleport green tunnel (TeleportScreenFX):
+        // the 2D head-locked swirl causes eye strain in VR. true = a
+        // world-locked 3D sphere (the game's door material) replaces the
+        // swirl. false = the original 2D swirl.
+        public static bool FixTeleportEffect = true;
+
+        // Preset sonar glow colors (no color picker in the options panel - a
+        // fixed set of tuned sonar hues). One shared preset drives both the
+        // floor hologram and the screen wave
+        public static Color32 SonarPresetColor(string name)
+        {
+            switch (name)
+            {
+                case "Lagoon": return new Color32(0, 229, 255, 255);
+                case "Cyan":   return new Color32(0, 255, 255, 255);
+                case "Teal":   return new Color32(0, 204, 153, 255);
+                case "Green":  return new Color32(51, 255, 102, 255);
+                case "White":  return new Color32(255, 255, 255, 255);
+                case "Blue":
+                default:       return new Color32(58, 145, 218, 255);  // the game holo material's blue
+            }
+        }
+        // Defaults = the user's final in-game calibration (log .56 runtime
+        // config dump) - a fresh install starts with a well-oriented PDA
+        public static float PDAHandAngleX = -5f;
         public static float PDAHandAngleY = 0f;
-        public static float PDAHandAngleZ = 0f;
+        public static float PDAHandAngleZ = 15f;
         public static event FloatChanged PDAHandAngleChanged;
 
         // Off by default: the standard trigger attack keeps working until opted in
         public static bool PhysicalKnifeSwing = false;
         public static float KnifeSwingSpeedThreshold = 4.0f;
-
-        public static bool DisableWalkBobbing = true;
 
         //Ambient Occlusion Settings
         public static bool AOEnabled = true;
@@ -153,7 +175,6 @@ namespace SubmersedVR
                 LeftHandBasedTurning = value == "Left Hand Based";
             });
             panel.AddSliderOption(tab, "Hand Movement Pitch Offset", HandMovementPitchOffset, 0f, 90f, HandMovementPitchOffset, 1f, (value) => { HandMovementPitchOffset = value; }, SliderLabelMode.Float, "0", "Pitch of the movement reference relative to the controller (hand based movement modes only). 45 = legacy behavior, 0 = move where the controller points.");
-            panel.AddToggleOption(tab, "Show Movement Laser", ShowMovementLaser, (value) => { ShowMovementLaser = value; }, "Green laser from the active hand showing the movement axis (hand based movement modes only). Use it while adjusting the pitch offset. Not saved between sessions.");
             panel.AddToggleOption(tab, "Enable Snap Turning", IsSnapTurningEnabled, (value) =>
             {
                 IsSnapTurningEnabled = value;
@@ -174,12 +195,13 @@ namespace SubmersedVR
             panel.AddHeading(tab, "Immersion");
             panel.AddToggleOption(tab, "Shoulder PDA", ShoulderPDA, (value) => { ShoulderPDA = value; }, "Reach your left hand to the PDA zone and press the left trigger to open/close the PDA. The regular PDA button keeps working.");
             panel.AddChoiceOption<string>(tab, "PDA Reach Zone", new string[] { "Shoulder", "Hip" }, PDAReachZone, (value) => { PDAReachZone = value; });
-            panel.AddSliderOption(tab, "PDA Hand Angle X(°)", PDAHandAngleX, -30f, 30f, PDAHandAngleX, 1f, (value) => { PDAHandAngleX = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", "Rotates the PDA in the left hand around the X axis. Calibrate with the PDA open.");
-            panel.AddSliderOption(tab, "PDA Hand Angle Y(°)", PDAHandAngleY, -30f, 30f, PDAHandAngleY, 1f, (value) => { PDAHandAngleY = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", null);
-            panel.AddSliderOption(tab, "PDA Hand Angle Z(°)", PDAHandAngleZ, -30f, 30f, PDAHandAngleZ, 1f, (value) => { PDAHandAngleZ = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", null);
+            panel.AddSliderOption(tab, "PDA Hand Angle X (def -5°)", PDAHandAngleX, -30f, 30f, PDAHandAngleX, 1f, (value) => { PDAHandAngleX = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", "Rotates the PDA in the left hand around the X axis. Calibrate with the PDA open.");
+            panel.AddSliderOption(tab, "PDA Hand Angle Y (def 0°)", PDAHandAngleY, -30f, 30f, PDAHandAngleY, 1f, (value) => { PDAHandAngleY = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", null);
+            panel.AddSliderOption(tab, "PDA Hand Angle Z (def 15°)", PDAHandAngleZ, -30f, 30f, PDAHandAngleZ, 1f, (value) => { PDAHandAngleZ = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", null);
             panel.AddToggleOption(tab, "Put survival meter on left wrist", PutBarsOnWrist, (value) => { PutBarsOnWrist = value; PutBarsOnWristChanged(value); });
             panel.AddToggleOption(tab, "Articulated Hands", ArticulatedHands, (value) => { ArticulatedHands = value; }, "Hands animate based on the movement of your physical hands.");
             panel.AddToggleOption(tab, "Physical Knife Swing", PhysicalKnifeSwing, (value) => { PhysicalKnifeSwing = value; }, "Swing your right controller to attack with the knife instead of pressing the trigger.");
+            panel.AddSliderOption(tab, "Knife Swing Speed Threshold", KnifeSwingSpeedThreshold, 2.0f, 5.0f, KnifeSwingSpeedThreshold, 0.1f, (value) => { KnifeSwingSpeedThreshold = value; }, SliderLabelMode.Float, "0.0", "Minimum controller speed (m/s) to trigger a knife swing.");
             panel.AddToggleOption(tab, "Enable Game Haptics(WIP)", AreGameHapticsEnabled, (value) => { AreGameHapticsEnabled = value; }, "Enable controller vibration while interacting with world objects.");
             panel.AddToggleOption(tab, "Enable UI Haptics(WIP)", AreUIHapticsEnabled, (value) => { AreUIHapticsEnabled = value; }, "Enable controller vibration while interacting with the User Interface.");
             panel.AddChoiceOption<string>(tab, "Show Laser Pointer", new string[] { "Always", "Default", "Never" }, ShowLaserPointer, (value) =>
@@ -189,31 +211,29 @@ namespace SubmersedVR
 
             panel.AddHeading(tab, "Experimental");
             panel.AddChoiceOption<string>(tab, "Hand reticle mode", new string[] { HandReticleModes.Legacy, HandReticleModes.PointerEnd, HandReticleModes.TargetInfo }, HandReticleMode, (value) => { HandReticleMode = value; HandReticleModeChanged?.Invoke(value); }, "Legacy hand reticle: all reticle info at the hand, original layout. Put hand reticle on laserpointer end: the whole reticle follows the laser pointer dot (hidden with it when there is no target). Put target info on laserpointer end: while aiming, the target action texts, icon and progress are projected on the laser hit point, the rest stays at the hand.");
-            // v69: the sonar is a single choice in the app - which screen
-            // shader. legacy = 100% original look = pick "legacy". Everything else
-            // (master toggle, range, wave look, stereo debug vis) was
-            // frozen in the code (SonarScreenWave / SonarScreenShaderFixV2)
-            // and removed from the panel; the fields stay in Settings for
-            // the inert drivers (edges, rework, recompiled)
-            panel.AddChoiceOption<string>(tab, "Sonar screen effect", SonarEffectOptions.Visible, SonarScreenEffect, (value) => { SonarScreenEffect = value; SonarEffectOptions.ApplySelection(); }, "What the sonar draws on screen. legacy = the game's own effect, shown only during a ping (both eyes) - the 100% original look. legacy (3D fixed) = the game's grid, stereo-corrected per eye (no more double grid in VR). blue wave = a bright lagoon-blue sonar wave (additive glow) that sweeps the terrain and leaves a fading trail, revealing relief. The fixed/wave options need the sonar_resources bundle in StreamingAssets; without it they do nothing.");
+            panel.AddToggleOption(tab, "Fix teleport effect in VR", FixTeleportEffect, (value) => { FixTeleportEffect = value; }, "Fixes the green teleport tunnel eye strain in VR. Enabled: a world-locked 3D sphere (the game's door effect) replaces the full-screen swirl. Disabled: the original 2D swirl.");
             panel.AddToggleOption(tab, "Invert Y Axis in Seamoth/Cameras", InvertYAxis, (value) => { InvertYAxis = value; InvertYAxisChanged(value); }, "Enables Y axis inversion for Seamoth and Cameras.");
             //panel.AddToggleOption(tab, "Enable Particle Fix", EnableParticleFix, (value) => { EnableParticleFix = value; }, "Enables Particle Optimizations.");
 
             panel.AddHeading(tab, "Vehicles");
             panel.AddSliderOption(tab, "Vehicle Recenter Delay(s)", VehicleRecenterDelay, 0f, 2f, VehicleRecenterDelay, 0.1f, (value) => { VehicleRecenterDelay = value; }, SliderLabelMode.Float, "0.0", "Delay before the VR view is recentered after entering a vehicle, so you can straighten your head first. 1s matches the vehicle entry transition.");
 
+            panel.AddHeading(tab, "Sonar");
+            panel.AddChoiceOption<string>(tab, "Sonar screen effect", SonarEffectOptions.Visible, SonarScreenEffect, (value) => { SonarScreenEffect = value; SonarEffectOptions.ApplySelection(); }, "What the sonar draws. legacy = the game's own effect, shown only during a ping (both eyes) - the 100% original look. legacy (3D fixed) = the game's grid, stereo-corrected per eye (no more double grid in VR). blue wave = a bright lagoon-blue sonar wave (additive glow) that sweeps the terrain and leaves a fading trail, revealing relief. hologram map (3D) = the blue wave on the whole view (objects/monsters glow) PLUS the game's own sonar hologram (the Seaglide / map room map look) rendered on the REAL terrain, revealed by the ping front, then fading out, synced to the screen wave. The fixed/wave/hologram options need the sonar_resources bundle in StreamingAssets for their screen layer; without it the screen layer does nothing (the hologram floor is a game material and still shows).");
+            panel.AddSliderOption(tab, "Ping Range (m)", SonarPingRange, 200f, 450f, SonarPingRange, 10f, (value) => { SonarPingRange = value; }, SliderLabelMode.Float, "0", "Max scan radius around the ping (m). Drives both the screen blue wave and the holo floor so the fronts reach the same radius. Terrain streaming limits the effective range (~350 m).");
+            panel.AddChoiceOption<string>(tab, "Sonar Color", new string[] { "Lagoon", "Blue", "Cyan", "Teal", "Green", "White" }, SonarColor, (value) => { SonarColor = value; }, "Glow color of the sonar (the on-screen blue wave and, in hologram map mode, the floor).");
+
             panel.AddHeading(tab, "Hidden/Advanced VR Settings(Those can cause motion sickness!)");
             panel.AddToggleOption(tab, "Enable pitching(Looking Up/Down) while diving", !VROptions.disableInputPitch, (value) => { VROptions.disableInputPitch = !value; }, "This allows you to pitch up and down using the right thumbstick when diving. Can be very disorienting! I recommend to keep this disabled!");
             panel.AddToggleOption(tab, "Enable desktop cinematics", VROptions.enableCinematics, (value) => { VROptions.enableCinematics = value; }, "Enables the games cinematics. Warning! Those move around your head and can cause motion sickness!");
             panel.AddToggleOption(tab, "Skip intro", VROptions.skipIntro, (value) => { VROptions.skipIntro = value; }, "Skip the intro when starting a new game.");
-            panel.AddToggleOption(tab, "Disable walk bobbing", DisableWalkBobbing, (value) => { DisableWalkBobbing = value; WalkBobDisabler.Apply(); }, "Disables the automatic vertical camera movement while walking (reduces VR motion sickness)");
 
 
             panel.AddHeading(tab, "Debug Options");
             panel.AddToggleOption(tab, "Debug Overlays", IsDebugEnabled, (value) => { IsDebugEnabled = value; IsDebugChanged(value); }, "Enables Debug Overlays and Logs.");
-            panel.AddSliderOption(tab, "Knife Swing Speed Threshold", KnifeSwingSpeedThreshold, 2.0f, 5.0f, KnifeSwingSpeedThreshold, 0.1f, (value) => { KnifeSwingSpeedThreshold = value; }, SliderLabelMode.Float, "0.0", "Minimum controller speed (m/s) to trigger a knife swing.");
             panel.AddToggleOption(tab, "Always show controllers", AlwaysShowControllers, (value) => { AlwaysShowControllers = value; AlwaysShowControllersChanged(value); }, "Shows the controllers at all times.");
             //panel.AddToggleOption(tab, "Always show laserpointer", AlwaysShowLaserPointer, (value) => { AlwaysShowLaserPointer = value; AlwaysShowLaserPointerChanged(value); }, "Show the laserpointer at all times.");
+            panel.AddToggleOption(tab, "Show Movement Laser", ShowMovementLaser, (value) => { ShowMovementLaser = value; }, "Green laser from the active hand showing the movement axis (hand based movement modes only). Use it while adjusting the pitch offset. Not saved between sessions.");
 
 #if false
             tab = panel.AddTab("Vehicles VR");

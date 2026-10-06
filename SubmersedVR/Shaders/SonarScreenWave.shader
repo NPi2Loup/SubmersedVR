@@ -119,6 +119,20 @@ Shader "SubmersedVR/SonarScreenWave"
             // p<1 (0.5 = square root) darkens faster with distance (~30%
             // left at half range). Slider range 0.1..1 (v67)
             uniform float _WaveAttenCurve;
+            // v68: GLOBAL fade mode (holo map only) - the whole revealed
+            // disc fades together (no comet following the front), synced
+            // with the 3D holo floor. 0 = comet trail (blue wave mode),
+            // 1 = global fade (set by C# only in the holo map mode)
+            uniform float _WaveGlobalFade;
+            // v68: total fade duration (s) - auto-calibrated by C# to the
+            // 3D holo floor's fade (SonarHoloMapFade) so both layers
+            // disappear at the same instant
+            uniform float _WaveFadeTotal;
+            // v68: hold-at-full duration (s) right after the reveal
+            uniform float _WavePlateauTime;
+            // v68: final rapid-fade duration (s); the gradual transparency
+            // increase fills the rest of _WaveFadeTotal
+            uniform float _WaveRapidTime;
 
             // Set once by SonarScreenWave: the wave color (lagoon
             // (0,0.9,1)). A real uniform - v43-v52 proved that a global
@@ -226,38 +240,89 @@ Shader "SubmersedVR/SonarScreenWave"
                 }
                 float front = 1.0 - smoothstep(0.0, max(_WaveBand, 0.0001), abs(d - frontR));
                 float trail = 0.0;
-                float trailAge = _WaveTime - tArr;
-                // Two-phase trail (v57, all parameters from the C# sliders):
-                //   phase 1 (0 .. _WaveTrailPlateau): _WaveTrailStart -> _WaveTrailLevel
-                //   phase 2 (.. + _WaveTrailFade):     _WaveTrailLevel -> 0
-                // Exactly 0 at the end of the window - the wave is fully
-                // attenuated before the next ping re-anchors it (no
-                // residual flash). _WaveTrailCurve = 1 applies an ease-in
-                // (1-x^2) WITHIN each phase (slow at the phase start,
-                // steeper at the phase end); 0 = linear
-                if (trailAge > 0.0)
+                float reveal = 0.0;
+                if (_WaveGlobalFade > 0.5)
                 {
-                    float t1 = max(_WaveTrailPlateau, 0.0);
-                    float t2 = max(_WaveTrailFade, 0.0);
-                    float lvl = saturate(_WaveTrailLevel);
-                    float st = saturate(_WaveTrailStart);
-                    if (trailAge < t1 + t2)
+                    // v68 GLOBAL fade (holo map mode): every revealed point
+                    // shares the same glow level G(_WaveTime), so the whole
+                    // disc fades together (no comet following the front).
+                    // G is 1 during the reveal, then a plateau (hold at
+                    // full) -> a gradual transparency increase -> a rapid
+                    // drop to 0, ending at sweep + _WaveFadeTotal (auto-
+                    // calibrated to the 3D holo floor's fade so both layers
+                    // disappear together). The reference t0 is the ping
+                    // launch (_WaveTime = t - t0) - the fade no longer
+                    // depends on each point's front arrival
+                    float sweepT = _WaveRange / max(_WaveSpeed, 0.0001);
+                    float ft = _WaveTime - sweepT;
+                    float g = 1.0;
+                    if (ft >= 0.0)
                     {
-                        if (trailAge <= t1)
+                        float total = max(_WaveFadeTotal, 0.0001);
+                        float p = max(_WavePlateauTime, 0.0);
+                        float r = max(_WaveRapidTime, 0.0);
+                        float grad = max(total - p - r, 0.0);
+                        float endL = saturate(_WaveTrailLevel);
+                        if (ft >= total)
                         {
-                            float x = t1 > 0.0 ? trailAge / t1 : 1.0;
-                            float drop = _WaveTrailCurve > 0.5 ? x * x : x;
-                            trail = st - (st - lvl) * drop;
+                            g = 0.0;
+                        }
+                        else if (ft <= p)
+                        {
+                            g = 1.0;
+                        }
+                        else if (ft <= p + grad)
+                        {
+                            float x = grad > 0.0001 ? (ft - p) / grad : 1.0;
+                            g = 1.0 - (1.0 - endL) * x;
                         }
                         else
                         {
-                            float x = t2 > 0.0 ? (trailAge - t1) / t2 : 1.0;
-                            float drop = _WaveTrailCurve > 0.5 ? x * x : x;
-                            trail = lvl * (1.0 - drop);
+                            float x = r > 0.0001 ? (ft - p - grad) / r : 1.0;
+                            g = endL * (1.0 - x);
                         }
                     }
+                    float band = max(_WaveBand, 0.0001);
+                    float revealed = 1.0 - smoothstep(frontR, frontR + band, d);
+                    trail = saturate(_WaveTrailStart) * revealed;
+                    reveal = g * max(front, trail);
                 }
-                float reveal = max(front, trail);
+                else
+                {
+                    // v57 two-phase per-point trail (blue wave mode, the
+                    // finalized comet behavior - unchanged):
+                    //   phase 1 (0 .. _WaveTrailPlateau): _WaveTrailStart -> _WaveTrailLevel
+                    //   phase 2 (.. + _WaveTrailFade):     _WaveTrailLevel -> 0
+                    // Exactly 0 at the end of the window - the wave is fully
+                    // attenuated before the next ping re-anchors it (no
+                    // residual flash). _WaveTrailCurve = 1 applies an ease-in
+                    // (1-x^2) WITHIN each phase (slow at the phase start,
+                    // steeper at the phase end); 0 = linear
+                    float trailAge = _WaveTime - tArr;
+                    if (trailAge > 0.0)
+                    {
+                        float t1 = max(_WaveTrailPlateau, 0.0);
+                        float t2 = max(_WaveTrailFade, 0.0);
+                        float lvl = saturate(_WaveTrailLevel);
+                        float st = saturate(_WaveTrailStart);
+                        if (trailAge < t1 + t2)
+                        {
+                            if (trailAge <= t1)
+                            {
+                                float x = t1 > 0.0 ? trailAge / t1 : 1.0;
+                                float drop = _WaveTrailCurve > 0.5 ? x * x : x;
+                                trail = st - (st - lvl) * drop;
+                            }
+                            else
+                            {
+                                float x = t2 > 0.0 ? (trailAge - t1) / t2 : 1.0;
+                                float drop = _WaveTrailCurve > 0.5 ? x * x : x;
+                                trail = lvl * (1.0 - drop);
+                            }
+                        }
+                    }
+                    reveal = max(front, trail);
+                }
                 if (reveal <= 0.001)
                 {
                     return r3;

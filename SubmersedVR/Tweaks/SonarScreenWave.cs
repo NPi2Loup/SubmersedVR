@@ -22,27 +22,24 @@ namespace SubmersedVR
         // line (the user's preferred look)
         private const float BandWidth = 1f;
 
-        // v68/v69: the user's FINAL wave parameters, ALL frozen (v69: the
-        // range too, and with it the last sonar setting in the app - only
-        // the screen-shader choice remains). Constants set ONCE at
-        // material creation (zero per-frame cost, and no shader const -
-        // the bundle-compiled const bug of v43-v52). The front speed
-        // (range / sweep) and the fade start (range / 3.5) derive from the
-        // range. Shared with the edges driver (same pulse)
-        internal const float FixedRange = 350f;          // v69: max range, frozen
-        internal const float FixedSweep = 2.5f;          // front crossing time
-        internal const float FixedEaseFront = 1f;        // accelerated front on
-        internal const float FixedTrailStart = 0.30f;    // trail level right behind the front
-        internal const float FixedTrailPlateau = 2.0f;   // s, phase 1
-        internal const float FixedTrailLevel = 0.2f;     // level at the plateau end
-        internal const float FixedTrailFade = 0.5f;      // s, phase 2 (level -> 0)
-        internal const float FixedTrailCurve = 0f;       // 0 = linear (eased off)
-        internal const float FixedReliefMin = 0.75f;     // relief shading floor
-        internal const float FixedRadar = 0f;            // 0 = classic mode (radar off)
-        internal const float FixedRadarCurve = 1f;       // unused while classic
-        internal const float FixedAttenEnd = 0f;         // fully transparent at max range
-        internal const float FixedAttenCurve = 0.35f;    // fade curve exponent
-        internal const float AttenStartDivisor = 3.5f;   // fade start = range / 3.5
+        // Frozen timing / look (the user's final calibration, log .56). The
+        // only live parameter is the shared Ping Range (Settings)
+        const float Sweep = 2.5f;               // s, front crossing time (speed = range / sweep)
+        const float StartOffset = -0.1f;        // s, the wave starts 0.1 s before the ping
+        const float AttenStartDivisor = 3.5f;   // fade start = range / 3.5
+        const float TrailStart = 0.30f;         // glow level right behind the front
+        const float TrailPlateau = 2.0f;        // s, trail phase 1 (start -> level)
+        const float TrailLevel = 0.2f;          // level at the plateau end
+        const float TrailFade = 0.5f;           // s, trail phase 2 (level -> 0)
+        const float TrailCurve = 0f;            // 0 = linear
+        const float ReliefMin = 0.75f;          // relief shading floor
+        const float Radar = 0f;                 // 0 = classic diffuse
+        const float RadarCurve = 1f;
+        const float AttenEnd = 0f;              // fade level reached at max range
+        const float AttenCurve = 0.35f;         // distance fade curve exponent
+        const float GlobalPlateau = 0f;         // s, hold at full (holo fade)
+        const float GlobalRapid = 0.5f;         // s, final rapid drop (holo fade)
+        const float WaveFadeTotal = 2.5f;       // s, global fade (holo mode), = the floor's Holo Fade
 
         // The wave color (lagoon), sent to the shader as a REAL uniform.
         // No global const in the shader: v43-v52 proved a global const does
@@ -61,15 +58,11 @@ namespace SubmersedVR
         static int lastFrame;
         static int callsThisFrame;
         static bool eyeFallbackLogged;
-        static bool wavePingLogPending = true;
-        // Logs _WaveTime once per whole second of the ping (0,1,2,3,4) to see
-        // whether it actually advances (a stuck _WaveTime=0 would keep the wave
-        // a 2 m disc at the camera -> invisible -> "black screen")
-        static int lastWaveTimeInt = -1;
 
         static bool IsActive()
         {
-            return Settings.SonarModEnabled && SonarEffectOptions.IsWave(Settings.SonarScreenEffect);
+            return Settings.SonarModEnabled
+                && SonarEffectOptions.IsScreenWave(Settings.SonarScreenEffect);
         }
 
         // Called on selection change: if the wave is no longer the selected
@@ -140,27 +133,12 @@ namespace SubmersedVR
                 waveMaterial.name = "SubmersedVR Sonar Wave";
                 waveMaterial.shader = waveShader;
                 waveMaterial.SetFloat("_WaveBand", BandWidth);
-                waveMaterial.SetVector("_WaveColor", WaveColor);
-                // v68/v69 frozen parameters (the user's final values), set
-                // ONCE here: zero per-frame cost. Per frame only
-                // _WaveTime, _WaveOrigin and the eye matrices change
-                waveMaterial.SetFloat("_WaveTrailStart", FixedTrailStart);
-                waveMaterial.SetFloat("_WaveTrailPlateau", FixedTrailPlateau);
-                waveMaterial.SetFloat("_WaveTrailLevel", FixedTrailLevel);
-                waveMaterial.SetFloat("_WaveTrailFade", FixedTrailFade);
-                waveMaterial.SetFloat("_WaveTrailCurve", FixedTrailCurve);
-                waveMaterial.SetFloat("_WaveEaseFront", FixedEaseFront);
-                waveMaterial.SetFloat("_WaveReliefMin", FixedReliefMin);
-                waveMaterial.SetFloat("_WaveRadar", FixedRadar);
-                waveMaterial.SetFloat("_WaveRadarCurve", FixedRadarCurve);
-                waveMaterial.SetFloat("_WaveAttenEnd", FixedAttenEnd);
-                waveMaterial.SetFloat("_WaveAttenCurve", FixedAttenCurve);
-                // v69: the range is frozen too - speed and fade start are
-                // constants as well, so per-frame only _WaveTime,
-                // _WaveOrigin and the eye matrices change
-                waveMaterial.SetFloat("_WaveRange", FixedRange);
-                waveMaterial.SetFloat("_WaveSpeed", FixedRange / FixedSweep);
-                waveMaterial.SetFloat("_WaveAttenStart", FixedRange / AttenStartDivisor);
+                // The look parameters (range / speed / trail / relief / radar /
+                // attenuation / color) are LIVE sliders - set every frame in
+                // UpdateLookParams so a slider change takes effect immediately
+                // (the material is created once and reused). Per frame only
+                // _WaveTime, _WaveOrigin, the eye matrices and the look params
+                // change
                 if (!swapLogged)
                 {
                     swapLogged = true;
@@ -267,6 +245,7 @@ namespace SubmersedVR
         static void UpdateUniforms(Material m, RenderTexture source)
         {
             UpdateEyeMatrices(m, source);
+            UpdateLookParams(m);
             if (!SonarWorldPing.HasPinged)
             {
                 // No ping yet: keep the wave off so the shader outputs a
@@ -274,37 +253,42 @@ namespace SubmersedVR
                 m.SetFloat("_WaveTime", -1f);
                 return;
             }
-            // v69: EVERYTHING is frozen (set once at material creation) -
-            // per frame only the ping timing and origin change
+            // The start offset shifts the whole screen timeline (positive =
+            // the wave starts later than the ping; negative = earlier).
+            // Negative _WaveTime is safe: the shader early-returns a clean
+            // pass-through for _WaveTime < 0
             m.SetVector("_WaveOrigin", SonarWorldPing.LastOrigin);
-            m.SetFloat("_WaveTime", Time.time - SonarWorldPing.LastPingTime);
+            m.SetFloat("_WaveTime", Time.time - SonarWorldPing.LastPingTime - StartOffset);
+        }
 
-            // Per-ping diagnostic: the exact uniforms handed to the shader
-            // (READ BACK from the material, so it's the real GPU value), incl.
-            // _WaveBand which is set only once at material creation
-            if (SonarWorldPing.IsPinging && wavePingLogPending)
-            {
-                wavePingLogPending = false;
-                float wt = Time.time - SonarWorldPing.LastPingTime;
-                Mod.logger.LogInfo($"[SonarFX] wave diag: _WaveTime={wt:F2} _WaveOrigin={SonarWorldPing.LastOrigin} _WaveSpeed={m.GetFloat("_WaveSpeed"):F1} _WaveRange={m.GetFloat("_WaveRange"):F0} trail=({m.GetFloat("_WaveTrailStart"):F2},{m.GetFloat("_WaveTrailPlateau"):F1}s,{m.GetFloat("_WaveTrailLevel"):F2},{m.GetFloat("_WaveTrailFade"):F1}s,curve={m.GetFloat("_WaveTrailCurve"):0}) easeFront={m.GetFloat("_WaveEaseFront"):0} reliefMin={m.GetFloat("_WaveReliefMin"):F2} radar={m.GetFloat("_WaveRadar"):0} radarCurve={m.GetFloat("_WaveRadarCurve"):F2} fade=({m.GetFloat("_WaveAttenStart"):F0}m,{m.GetFloat("_WaveAttenEnd"):F2},p={m.GetFloat("_WaveAttenCurve"):F1}) _WaveBand={m.GetFloat("_WaveBand"):F2}");
-            }
-            if (!SonarWorldPing.IsPinging)
-            {
-                wavePingLogPending = true;
-                lastWaveTimeInt = -1;
-            }
-            // Per-second progression: log _WaveTime once per whole second so we
-            // can see if it advances (0->1->2->3->4) or is stuck at 0
-            if (SonarWorldPing.IsPinging)
-            {
-                float wt2 = Time.time - SonarWorldPing.LastPingTime;
-                int wti = (int)wt2;
-                if (wti != lastWaveTimeInt)
-                {
-                    lastWaveTimeInt = wti;
-                    Mod.logger.LogInfo($"[SonarFX] wave time tick: _WaveTime={wt2:F2} (s={wti})");
-                }
-            }
+        // The wave look parameters. Set every frame (the range is a live
+        // option; the rest are frozen constants)
+        internal static void UpdateLookParams(Material m)
+        {
+            float range = Settings.SonarPingRange;
+            m.SetFloat("_WaveRange", range);
+            m.SetFloat("_WaveSpeed", range / Sweep);
+            m.SetFloat("_WaveEaseFront", 0f);
+            m.SetFloat("_WaveAttenStart", range / AttenStartDivisor);
+            m.SetFloat("_WaveTrailStart", TrailStart);
+            m.SetFloat("_WaveTrailPlateau", TrailPlateau);
+            m.SetFloat("_WaveTrailLevel", TrailLevel);
+            m.SetFloat("_WaveTrailFade", TrailFade);
+            m.SetFloat("_WaveTrailCurve", TrailCurve);
+            m.SetFloat("_WaveReliefMin", ReliefMin);
+            m.SetFloat("_WaveRadar", Radar);
+            m.SetFloat("_WaveRadarCurve", RadarCurve);
+            m.SetFloat("_WaveAttenEnd", AttenEnd);
+            m.SetFloat("_WaveAttenCurve", AttenCurve);
+            // Global fade (holo map mode only) - the whole revealed disc fades
+            // together (no comet), synced with the 3D holo floor; the blue
+            // wave mode keeps its comet trail (_WaveGlobalFade = 0)
+            m.SetFloat("_WaveGlobalFade", SonarEffectOptions.IsHoloMap(Settings.SonarScreenEffect) ? 1f : 0f);
+            m.SetFloat("_WaveFadeTotal", WaveFadeTotal);
+            m.SetFloat("_WavePlateauTime", GlobalPlateau);
+            m.SetFloat("_WaveRapidTime", GlobalRapid);
+            Color c = Settings.SonarPresetColor(Settings.SonarColor);
+            m.SetVector("_WaveColor", new Vector4(c.r, c.g, c.b, 1f));
         }
     }
 

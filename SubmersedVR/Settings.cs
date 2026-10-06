@@ -46,9 +46,11 @@ namespace SubmersedVR
 
         public static bool ShoulderPDA = true;
         public static string PDAReachZone = "Shoulder";
-        public static float PDAHandAngleX = 0f;
+        // Defaults = the user's final in-game calibration (log .56 runtime
+        // config dump) - a fresh install starts with a well-oriented PDA
+        public static float PDAHandAngleX = -5f;
         public static float PDAHandAngleY = 0f;
-        public static float PDAHandAngleZ = 0f;
+        public static float PDAHandAngleZ = 15f;
         public static event FloatChanged PDAHandAngleChanged;
 
         //Ambient Occlusion Settings
@@ -134,9 +136,9 @@ namespace SubmersedVR
             panel.AddHeading(tab, "Immersion");
             panel.AddToggleOption(tab, "Shoulder PDA", ShoulderPDA, (value) => { ShoulderPDA = value; }, "Reach your left hand to the PDA zone and press the left trigger to open/close the PDA. The regular PDA button keeps working.");
             panel.AddChoiceOption<string>(tab, "PDA Reach Zone", new string[] { "Shoulder", "Hip" }, PDAReachZone, (value) => { PDAReachZone = value; });
-            panel.AddSliderOption(tab, "PDA Hand Angle X(°)", PDAHandAngleX, -30f, 30f, PDAHandAngleX, 1f, (value) => { PDAHandAngleX = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", "Rotates the PDA in the left hand around the X axis. Calibrate with the PDA open.");
-            panel.AddSliderOption(tab, "PDA Hand Angle Y(°)", PDAHandAngleY, -30f, 30f, PDAHandAngleY, 1f, (value) => { PDAHandAngleY = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", null);
-            panel.AddSliderOption(tab, "PDA Hand Angle Z(°)", PDAHandAngleZ, -30f, 30f, PDAHandAngleZ, 1f, (value) => { PDAHandAngleZ = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", null);
+            panel.AddSliderOption(tab, "PDA Hand Angle X (def -5°)", PDAHandAngleX, -30f, 30f, PDAHandAngleX, 1f, (value) => { PDAHandAngleX = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", "Rotates the PDA in the left hand around the X axis. Calibrate with the PDA open.");
+            panel.AddSliderOption(tab, "PDA Hand Angle Y (def 0°)", PDAHandAngleY, -30f, 30f, PDAHandAngleY, 1f, (value) => { PDAHandAngleY = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", null);
+            panel.AddSliderOption(tab, "PDA Hand Angle Z (def 15°)", PDAHandAngleZ, -30f, 30f, PDAHandAngleZ, 1f, (value) => { PDAHandAngleZ = value; PDAHandAngleChanged?.Invoke(value); }, SliderLabelMode.Float, "0", null);
             panel.AddToggleOption(tab, "Put survival meter on left wrist", PutBarsOnWrist, (value) => { PutBarsOnWrist = value; PutBarsOnWristChanged(value); });
             panel.AddToggleOption(tab, "Articulated Hands", ArticulatedHands, (value) => { ArticulatedHands = value; }, "Hands animate based on the movement of your physical hands.");
             panel.AddToggleOption(tab, "Enable Game Haptics(WIP)", AreGameHapticsEnabled, (value) => { AreGameHapticsEnabled = value; }, "Enable controller vibration while interacting with world objects.");

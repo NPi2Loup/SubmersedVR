@@ -4,9 +4,8 @@
     <TargetFramework>net472</TargetFramework>
     <AssemblyName>SubmersedVR</AssemblyName>
     <Description>A VR Conversion Mod for Subnautica</Description>
-    <Version>0.2.0</Version>
-    <!-- Suffixe du zip de build (-vNN) pour distinguer chaque build de test. Changer ici pour le prochain build. v2 = release publique (la numérotation de dev v33-v70 reste dans les docs .md du repo) -->
-    <ZipVersionSuffix>v2</ZipVersionSuffix>
+    <!-- Version du mod : le zip s'appelle SubmersedVR_<version>.zip (la numérotation de dev -vNN est terminée, elle reste dans les docs .md du repo) -->
+    <Version>0.3.0</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <!-- NOTE: Preprocessor directive SV = SubmersedVR, BZ = Below Zero -->
@@ -67,7 +66,7 @@
     <Copy SourceFiles="StreamingAssets\SteamVR\bindings_holographic.json" DestinationFolder="@(BindingsFolder)" SkipUnchangedFiles="true"/>
     <Copy SourceFiles="SteamVR\SteamVR.dll" DestinationFolder="@(ManagedFolder)" SkipUnchangedFiles="true"/>
     <Copy SourceFiles="SteamVR\SteamVR_Actions.dll" DestinationFolder="@(ManagedFolder)" SkipUnchangedFiles="true"/>
-    <ZipDirectory SourceDirectory="$(BuildDir)" DestinationFile="$(MSBuildProjectDirectory)\$(AssemblyName)_$(Version)-$(ZipVersionSuffix).zip" />
+    <ZipDirectory SourceDirectory="$(BuildDir)" DestinationFile="$(MSBuildProjectDirectory)\$(AssemblyName)_$(Version).zip" />
   </Target>
 
 </Project>

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
@@ -80,11 +79,8 @@ namespace SubnauticaMapBridge
             }
 
             instanceProperty = controllerType.GetProperty("Instance", BindingFlags.Public | BindingFlags.Static);
-            // Signature-validated (like Zoom below): a name-only lookup would still "succeed"
-            // after a mod rebuild changes the arity, and every per-frame Invoke would then
-            // throw TargetParameterCountException from the input hooks.
-            mapIsOpenedMethod = controllerType.GetMethod("MapIsOpened", BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
-            createNoteMethod = FindCreateNoteMethod(controllerType);
+            mapIsOpenedMethod = controllerType.GetMethod("MapIsOpened", BindingFlags.Public | BindingFlags.Instance);
+            createNoteMethod = controllerType.GetMethod("CreateNote", BindingFlags.Public | BindingFlags.Instance);
             zoomMethod = controllerType.GetMethod("Zoom", BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { typeof(float), typeof(bool) }, null);
             scrollViewField = controllerType.GetField("scrollView", BindingFlags.NonPublic | BindingFlags.Instance);
             mapContainerField = controllerType.GetField("mapContainer", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -98,39 +94,14 @@ namespace SubnauticaMapBridge
                 scanCircleField = mapRoomMapIconType.GetField("scanCircle", BindingFlags.Public | BindingFlags.Instance);
             }
             mapRoomMapIconListField = controllerType.GetField("mapRoomMapIconList", BindingFlags.NonPublic | BindingFlags.Instance);
-            Type cursorManagerType = AccessTools.TypeByName("CursorManager");
-            lastRaycastField = cursorManagerType != null ? cursorManagerType.GetField("lastRaycast", BindingFlags.NonPublic | BindingFlags.Static) : null;
+            lastRaycastField = AccessTools.TypeByName("CursorManager").GetField("lastRaycast", BindingFlags.NonPublic | BindingFlags.Static);
             inputLastRaycastField = typeof(FPSInputModule).GetField("lastRaycastResult", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
             getCursorScreenPositionMethod = typeof(FPSInputModule).GetMethod("GetCursorScreenPosition", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
-            List<string> missing = new List<string>();
-            if (instanceProperty == null)
+            if (instanceProperty == null || mapIsOpenedMethod == null || createNoteMethod == null ||
+                mapContainerField == null || lastRaycastField == null || inputLastRaycastField == null)
             {
-                missing.Add("Controller.Instance");
-            }
-            if (mapIsOpenedMethod == null)
-            {
-                missing.Add("Controller.MapIsOpened()");
-            }
-            if (createNoteMethod == null)
-            {
-                missing.Add("Controller.CreateNote(<ref param>)");
-            }
-            if (mapContainerField == null)
-            {
-                missing.Add("Controller.mapContainer");
-            }
-            if (lastRaycastField == null)
-            {
-                missing.Add("CursorManager.lastRaycast");
-            }
-            if (inputLastRaycastField == null)
-            {
-                missing.Add("FPSInputModule.lastRaycastResult");
-            }
-            if (missing.Count > 0)
-            {
-                Mod.logger.LogWarning($"SubnauticaMap/FPSInputModule API changed (missing {string.Join(", ", missing)}), bridge disabled.");
+                Mod.logger.LogWarning("SubnauticaMap/FPSInputModule API changed (missing members), bridge disabled.");
                 return false;
             }
 
@@ -201,22 +172,6 @@ namespace SubnauticaMapBridge
             Mod.logger.LogInfo("Map note creation patched (trigger click on the map).");
         }
 
-        // CreateNote takes a reference-type sprite argument and the bridge passes null; a future
-        // rebuild with a value-type (or different-arity) signature must not be picked up by a
-        // name-only lookup — that would throw ArgumentException on every note click.
-        static MethodInfo FindCreateNoteMethod(Type controllerType)
-        {
-            foreach (MethodInfo m in controllerType.GetMethods(BindingFlags.Public | BindingFlags.Instance))
-            {
-                if (m.Name != "CreateNote" || m.GetParameters().Length != 1 || m.GetParameters()[0].ParameterType.IsValueType)
-                {
-                    continue;
-                }
-                return m;
-            }
-            return null;
-        }
-
         // The mod's Rotate coroutine (decompiled L2981-2991) spins the scan distance circle with
         // transform.eulerAngles — WORLD space. In 2D the PDA canvas world rotation is identity,
         // so it behaves like an in-plane spin; in VR the canvas is rotated to the PDA screen's
@@ -226,12 +181,12 @@ namespace SubnauticaMapBridge
         // Redirecting the setter to set_localEulerAngles makes the spin in-plane — identical
         // behavior in 2D, and the circle rides the map plane in VR.
         //
-        // Rotate itself must NOT be assumed to carry the call: it is an ITERATOR — its method
-        // body only creates the compiler state machine, and the loop with the set_eulerAngles
-        // call (raw IL: `callvirt Transform::set_eulerAngles`) lives in the nested state
-        // machine type MapRoomMapIcon/<Rotate>d__N :: MoveNext. So MoveNext of EVERY nested
-        // state machine of MapRoomMapIcon is patched (name-robust across mod rebuilds — the d__
-        // number changes), plus Rotate itself (harmless, future-proof).
+        // v0.3.5 bug (log.19, same symptom): Rotate is an ITERATOR — its method body only
+        // creates the compiler state machine, and the loop with the set_eulerAngles call
+        // (raw IL: `callvirt Transform::set_eulerAngles`) lives in the nested state machine
+        // type MapRoomMapIcon/<Rotate>d__15 :: MoveNext. Patching Rotate was a no-op. v0.3.6
+        // patches MoveNext of every nested state machine of MapRoomMapIcon (name-robust across
+        // mod rebuilds — the d__ number changes) plus Rotate itself (harmless, future-proof).
         public static void ApplyScanCirclePatch()
         {
             if (!ModPresent || scanCirclePatched)
@@ -246,7 +201,6 @@ namespace SubnauticaMapBridge
 
             HarmonyMethod transpiler = new HarmonyMethod(typeof(ScanCircleRotateLocal), nameof(ScanCircleRotateLocal.Transpiler));
             int patched = 0;
-            ScanCircleRotateLocal.ResetCount();
 
             if (rotateMethod != null)
             {
@@ -257,8 +211,10 @@ namespace SubnauticaMapBridge
             foreach (Type nested in mapRoomMapIconType.GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic))
             {
                 // NonPublic required: the compiler emits the state machine's MoveNext as a
-                // PRIVATE explicit interface implementation — a Public-only lookup returns null
-                // silently, and the patch is then never applied.
+                // PRIVATE explicit interface implementation (verified by runtime reflection on
+                // the mod DLL: `MoveNext public=False`) — v0.3.6 looked it up Public-only and
+                // silently skipped every state machine (log.20: "patched (1 method(s))" =
+                // Rotate only, the no-op).
                 MethodInfo moveNext = nested.GetMethod("MoveNext", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
                 if (moveNext == null)
                 {
@@ -269,14 +225,12 @@ namespace SubnauticaMapBridge
             }
 
             scanCirclePatched = true;
-            Mod.logger.LogInfo($"Scan circle rotation patched ({patched} method(s), {ScanCircleRotateLocal.RedirectedCalls} eulerAngles call(s) redirected world -> local, in-plane in VR).");
+            Mod.logger.LogInfo($"Scan circle rotation patched ({patched} method(s), world -> local eulerAngles, in-plane in VR).");
         }
 
         // The icon list is a private field on the Controller (MapRoomMapIcon is a plain C#
-        // class — FindObjectsOfType cannot see it). Returns the scanCircle Image of every map
-        // room icon currently in the list. The field is a Dictionary in the tested version; a
-        // plain List would break `as IDictionary`, so both are accepted (the safety net must
-        // survive a rebuild that changes the container).
+        // class — FindObjectsOfType cannot see it, log.19). Returns the scanCircle Image of
+        // every map room icon currently in the list.
         public static Image[] GetScanCircles()
         {
             if (mapRoomMapIconListField == null || scanCircleField == null)
@@ -290,21 +244,15 @@ namespace SubnauticaMapBridge
                 return null;
             }
 
-            object raw = mapRoomMapIconListField.GetValue(controller);
-            System.Collections.IList icons = raw as System.Collections.IList;
-            if (icons == null)
+            System.Collections.IDictionary list = mapRoomMapIconListField.GetValue(controller) as System.Collections.IDictionary;
+            if (list == null)
             {
-                System.Collections.IDictionary list = raw as System.Collections.IDictionary;
-                if (list == null)
-                {
-                    return null;
-                }
-                icons = (System.Collections.IList)list.Values;
+                return null;
             }
 
-            Image[] circles = new Image[icons.Count];
+            Image[] circles = new Image[list.Count];
             int i = 0;
-            foreach (object icon in icons)
+            foreach (object icon in list.Values)
             {
                 circles[i++] = scanCircleField.GetValue(icon) as Image;
             }
@@ -324,34 +272,20 @@ namespace SubnauticaMapBridge
         {
             get
             {
-                Player player = Player.main;
-                PDA pda = player != null ? player.GetPDA() : null;
-                return pda != null && pda.isOpen;
+                return Player.main != null && Player.main.GetPDA() != null && Player.main.GetPDA().isOpen;
             }
         }
 
-        // Guarded: this runs every frame (input hooks, Update, LateUpdate) — a runtime throw
-        // from the mod's own method (scene transition, mod rebuild) must degrade to "map not
-        // open", not spam the game's input pipeline with exceptions.
         public static bool IsMapOpen
         {
             get
             {
                 object controller = GetController();
-                if (controller == null || mapIsOpenedMethod == null)
+                if (controller == null)
                 {
                     return false;
                 }
-                try
-                {
-                    return (bool)mapIsOpenedMethod.Invoke(controller, null);
-                }
-                catch (Exception ex)
-                {
-                    mapIsOpenedMethod = null;
-                    Mod.logger.LogWarning($"SubnauticaMap MapIsOpened failed at runtime ({ex.Message}); map-open gating disabled.");
-                    return false;
-                }
+                return (bool)mapIsOpenedMethod.Invoke(controller, null);
             }
         }
 
@@ -403,17 +337,7 @@ namespace SubnauticaMapBridge
                 return false;
             }
 
-            object boxed;
-            try
-            {
-                boxed = getCursorScreenPositionMethod.Invoke(input, null);
-            }
-            catch (Exception ex)
-            {
-                getCursorScreenPositionMethod = null;
-                Mod.logger.LogWarning($"FPSInputModule.GetCursorScreenPosition failed at runtime ({ex.Message}); laser screen position disabled.");
-                return false;
-            }
+            object boxed = getCursorScreenPositionMethod.Invoke(input, null);
             if (boxed is Vector2 v2)
             {
                 screenPos = v2;
@@ -467,8 +391,8 @@ namespace SubnauticaMapBridge
 
         // Event-based variant: is the given transform inside the map container. Used by the note
         // click gate with the click event's own raycast — FPSInputModule.lastRaycastResult can be
-        // stale/invalid on the click dispatch frame (observed: hover=False on every click while
-        // the EventSystem's own raycast hit "Map").
+        // stale/invalid on the click dispatch frame (log.3: hover=False on all 10 clicks while the
+        // EventSystem's own raycast hit "Map").
         public static bool IsChildOfMapContainer(Transform target)
         {
             if (target == null)
@@ -545,40 +469,18 @@ namespace SubnauticaMapBridge
             }
 
             object controller = GetController();
-            if (controller == null)
-            {
-                return;
-            }
-            try
+            if (controller != null)
             {
                 zoomMethod.Invoke(controller, new object[] { step, true });
-            }
-            catch (Exception ex)
-            {
-                zoomMethod = null;
-                Mod.logger.LogWarning($"SubnauticaMap Zoom failed at runtime ({ex.Message}); VR zoom disabled (native drag/scroll unchanged).");
             }
         }
 
         public static void CreateNote()
         {
-            if (createNoteMethod == null)
-            {
-                return;
-            }
             object controller = GetController();
-            if (controller == null)
-            {
-                return;
-            }
-            try
+            if (controller != null)
             {
                 createNoteMethod.Invoke(controller, new object[] { null });
-            }
-            catch (Exception ex)
-            {
-                createNoteMethod = null;
-                Mod.logger.LogWarning($"SubnauticaMap CreateNote failed at runtime ({ex.Message}); note creation disabled.");
             }
         }
     }

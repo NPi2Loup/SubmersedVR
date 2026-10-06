@@ -50,11 +50,10 @@ namespace SubnauticaMapBridge
     // click vs drag). No hold fallback, no options: v0.3.1's sliders were tested (user) and the
     // whole options UI was removed with them (v0.3.0 philosophy: installed = active).
     //
-    // This hook is STATELESS: it only reads the engagement measured per-frame in
-    // MapModRuntime.UpdatePanEngage. An earlier version held the press timestamp here — but
-    // ShouldStartDrag is polled only while the EventSystem processes a pressed pointer, so
-    // between presses the timestamp survived and the next press engaged "instantly" (observed:
-    // engagement logged 364 s after the press).
+    // This hook is STATELESS (v0.2.6): it only reads the engagement measured per-frame in
+    // MapModRuntime.UpdatePanEngage. v0.2.5 held pressStart here — but ShouldStartDrag is polled
+    // only while the EventSystem processes a pressed pointer, so between presses the timestamp
+    // survived and the next press engaged "instantly" (log.9: "engaged after 364.36s").
     [HarmonyPatch(typeof(FPSInputModule), nameof(FPSInputModule.ShouldStartDrag))]
     static class MapModDragThreshold
     {
@@ -81,10 +80,10 @@ namespace SubnauticaMapBridge
     // hover gate on the click event's own raycast + the cursor sync from that raycast.
     static class NoteOnMapClick
     {
-        // ~5 cm of hand movement. SubmersedVR stores world-space positions in the pointer event,
-        // so the threshold is in meters. The first-click diag logs below verify the unit
-        // assumption in-game: if the positions were screen pixels instead, the distance would be
-        // ~1000x larger and every note click would be (visibly) suppressed.
+        // ~5 cm of hand movement. SubmersedVR stores world-space positions in the pointer event, so
+        // the threshold is in meters. CONFIRM AT FIRST LAUNCH via the one-shot diag logs below:
+        // if the values are screen coordinates instead, all notes would be blocked and this
+        // constant must be re-scaled (plan §5.2a / test W1).
         const float ClickMaxDragDistance = 0.05f;
 
         static bool loggedNoteClick;
@@ -95,7 +94,7 @@ namespace SubnauticaMapBridge
         {
             // Hover gate on the click event's OWN raycast — the one that dispatched the click —
             // not FPSInputModule.lastRaycastResult, which can be stale/invalid on the dispatch
-            // frame (observed: hover=False on every click while the event raycast hit "Map").
+            // frame (log.3: hover=False on all 10 clicks while the event raycast hit "Map").
             // "Map" is scrollView.content (decompiled L1372), a child of mapContainer by
             // construction, so this check is timing-independent.
             RaycastResult clickRay = eventData.pointerCurrentRaycast;
@@ -220,11 +219,10 @@ namespace SubnauticaMapBridge
         bool firstPanLogged;
 
         // Pan-engage state, sampled every frame here (never in the ShouldStartDrag hook, which is
-        // only polled while a pointer is pressed — see the latch-bug note on that hook).
-        // Engage = the laser hit point on the map moved past PanMoveThreshold (Windows-style:
-        // cursor movement decides click vs drag). No hold fallback, no options: installed = active.
-        // 2 mm: raised above the 1 mm minimum during in-game testing to reject hand tremor.
-        const float PanMoveThreshold = 0.002f;
+        // only polled while a pointer is pressed — v0.2.5 latch bug, log.9 "engaged after 364s").
+        // v0.3.2: engage = the laser hit point on the map moved past PanMoveThreshold
+        // (Windows-style). No hold fallback (v0.3.1's was removed with the sliders).
+        const float PanMoveThreshold = 0.002f; // v0.3.1 slider tested at minimum (log.15), user asked to raise it (log.16 test)
 
         float panPressStart = -1f;
         Vector3 panPressPos;
@@ -251,24 +249,20 @@ namespace SubnauticaMapBridge
         {
             // Discontinuity guard: a frame gap of several maximum timesteps = pause/backgrounding,
             // the input history across it is unknown → reset (Unity Time.maximumDeltaTime pattern).
-            // zoomAccum is reset too: the large dt of the gap frame would otherwise feed it and
-            // burst several Zoom() steps in one frame when play resumes.
             if (Time.unscaledDeltaTime > Time.maximumDeltaTime * 4f)
             {
                 panPressStart = -1f;
                 panEngaged = false;
                 panHasPressPos = false;
-                zoomAccum = 0f;
                 return;
             }
 
             // String polling, deliberately NOT an action handle: SteamVR_Action.Create before the
             // plugin's action init returns a non-null object with handle 0, which a null check
-            // cannot detect — that broke an earlier version (native "InvalidHandle handle: 0"
-            // every poll, the press was never seen). The string statics cache the lookup, and
-            // SubmersedVR itself polls by string in its per-frame input path
-            // (SteamVrGetButtonDown, SteamVrGameInput.cs) — for a single action the difference
-            // is negligible.
+            // cannot detect — that broke v0.2.6 (native "InvalidHandle handle: 0" every poll,
+            // press never seen, log10). The string statics cache the lookup, and SubmersedVR
+            // itself polls by string in its per-frame input path (SteamVrGetButtonDown,
+            // SteamVrGameInput.cs:120) — for a single action the difference is negligible.
             if (SteamVR_Input.GetState("UISubmit", SteamVR_Input_Sources.Any))
             {
                 if (panPressStart < 0f)
@@ -327,14 +321,17 @@ namespace SubnauticaMapBridge
                 return;
             }
 
-            if (!MapMod.PdaOpen || !MapMod.IsMapOpen || MapMod.NoteFormActive || !MapMod.IsHoveringMap())
+            if (!MapMod.TryGetInputModule(out FPSInputModule input))
             {
                 return;
             }
 
-            // Only while the map is actually shown: writing the mod's cursor copy every frame in
-            // VR (even PDA closed) would be an unneeded side effect on the game's raycaster.
             MapMod.SyncCursorRaycast();
+
+            if (!MapMod.PdaOpen || !MapMod.IsMapOpen || MapMod.NoteFormActive || !MapMod.IsHoveringMap())
+            {
+                return;
+            }
 
             ScrollRect scrollView = MapMod.GetScrollView();
             if (scrollView == null)
@@ -392,21 +389,22 @@ namespace SubnauticaMapBridge
             }
         }
 
-        // The scan-circle plane fix + diagnostic. The mod's Rotate coroutine (decompiled
-        // L2981-2991) spins the scan distance circle with transform.eulerAngles — WORLD space.
-        // In 2D the PDA canvas world rotation is identity, so it behaves like an in-plane spin.
-        // In VR the canvas is rotated to the PDA screen's world orientation (SubmersedVR
-        // head-space placement), so each frame the circle is snapped to the world XZ plane: out
-        // of the map plane, frozen at a world ~(0,0,0) orientation while its center
-        // (localPosition, L1705) still tracks the room icon — exactly the reported symptom
-        // (circle out of the map plane, fixed to the world, center following the icon). The
-        // ScanCircleRotateLocal transpiler (applied in MapMod.ApplyScanCirclePatch) redirects
-        // that write to localEulerAngles: an in-plane spin, identical behavior in 2D.
-        // The map placement itself is CORRECT (the map sticks to the PDA screen and follows the
-        // PDA — an earlier attempt pinned the canvas, but the core re-places it after
-        // LateUpdate every frame, so the pin was dead code). Only the circle was wrong. The
-        // diagnostic (3 samples, UNSCALED time — Update still runs while the PDA is open)
-        // measures the circle's rotation against the canvas plane to validate the fix.
+        // v0.3.5 — the scan-circle plane fix + diagnostic. The mod's Rotate coroutine
+        // (decompiled L2981-2991) spins the scan distance circle with transform.eulerAngles —
+        // WORLD space. In 2D the PDA canvas world rotation is identity, so it behaves like an
+        // in-plane spin. In VR the canvas is rotated to the PDA screen's world orientation
+        // (SubmersedVR head-space placement, log.17/18), so each frame the circle is snapped to
+        // the world XZ plane: out of the map plane, frozen at a world ~(0,0,0) orientation
+        // while its center (localPosition, L1705) still tracks the room icon — exactly the
+        // user's report ("cercle pas dans le même plan que la carte, figé dans le monde,
+        // orientation 0,0,0, centre suit l'icône"). The ScanCircleRotateLocal transpiler
+        // (applied in MapMod.ApplyScanCirclePatch) redirects that setter to
+        // set_localEulerAngles: an in-plane spin, identical behavior in 2D.
+        // v0.3.4's canvas pin is gone: log.18 proved the core re-places the canvas after
+        // LateUpdate every frame (the pin was dead code) — and the map placement itself is
+        // CORRECT (user: map stuck to the PDA screen, follows the PDA). Only the circle was
+        // wrong. The diagnostic (3 samples, UNSCALED time — Update still runs while the PDA is
+        // open) measures the circle's world angle against the canvas plane to validate the fix.
         const int ScanCircleDiagMax = 3; // first sample on (re)open, then every 2 s unscaled
 
         int scanCircleDiagSamples;
@@ -441,7 +439,7 @@ namespace SubnauticaMapBridge
             try
             {
                 // Plane reference: the PDA canvas root rect (scaler._rectTransform, reflection —
-                // private in the runtime build, see GetScalerField).
+                // private at the user's runtime, AGENTS.md visibility lesson).
                 uGUI_PDA pdaUI = null;
                 foreach (uGUI_PDA p in FindObjectsOfType<uGUI_PDA>())
                 {
@@ -466,10 +464,10 @@ namespace SubnauticaMapBridge
                     }
                     // The circle's rotation expressed in canvas space: in-plane = a PURE Z
                     // spin, so the healthy state is x≈0 ∧ y≈0 — NOT "quaternion angle to the
-                    // canvas is small" (an earlier indicator version was a false alarm while
-                    // the radar sweeps: a healthy in-plane circle 155° into its sweep is 155°
-                    // away from the canvas rotation as a quaternion). planeDelta = x/y/z in
-                    // canvas space (x/y wrapped to [-180,180] to kill the euler wrap ambiguity).
+                    // canvas is small" (v0.3.5-0.3.7 indicator, a false alarm while the radar
+                    // sweeps: a healthy in-plane circle 155° into its sweep is 155° away from
+                    // the canvas rotation as a quaternion). planeDelta = x/y/z in canvas space
+                    // (x/y wrapped to [-180,180] to kill the euler wrap ambiguity).
                     string planeDelta = "n/a";
                     string inPlane = "?";
                     if (canvasRt != null)
@@ -490,7 +488,7 @@ namespace SubnauticaMapBridge
             }
         }
 
-        // Safety net: re-align the scan circle with the map plane after the mod's Rotate
+        // v0.3.7 safety net: re-align the scan circle with the map plane after the mod's Rotate
         // coroutine snaps it to the world XZ plane (its world-eulerAngles write — the Harmony
         // transpiler is the primary fix, this guarantees the plane even if the IL match misses
         // a future mod rebuild). LateUpdate = after every Update-phase coroutine, so the
@@ -572,21 +570,19 @@ namespace SubnauticaMapBridge
 
         static Dictionary<string, FieldInfo> scalerFieldCache = new Dictionary<string, FieldInfo>();
 
-        // Visibility-agnostic field read (the stubs compiled against may publicize members that
-        // are private in the runtime build) + inheritance-walking lookup: GetField does not walk
-        // the hierarchy for non-public members, and _anchor / _rectTransform / _canvas are
-        // private in the runtime build. Cached per (target type, field name).
+        // Visibility-agnostic field read (publicized-stub lesson, AGENTS.md) + inheritance-walking
+        // lookup: GetField does not walk the hierarchy for non-public members, and _anchor /
+        // _rectTransform / _canvas are private in the user's runtime build.
         static T GetScalerField<T>(object target, string name) where T : class
         {
-            string key = target.GetType().FullName + "." + name;
-            if (!scalerFieldCache.TryGetValue(key, out FieldInfo field))
+            if (!scalerFieldCache.TryGetValue(name, out FieldInfo field))
             {
                 field = null;
                 for (Type t = target.GetType(); t != null && field == null; t = t.BaseType)
                 {
                     field = t.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
                 }
-                scalerFieldCache[key] = field;
+                scalerFieldCache[name] = field;
             }
             return field?.GetValue(target) as T;
         }
@@ -599,27 +595,19 @@ namespace SubnauticaMapBridge
     // call's operand only (identical signatures); if a future mod build stops calling them
     // there, the transpiler is a harmless no-op.
     //
-    // BOTH the getter and the setter are swapped: the coroutine is a FEEDBACK LOOP —
+    // BOTH the getter and the setter are swapped (v0.3.8): the coroutine is a FEEDBACK LOOP —
     // `z = transform.eulerAngles.z - 30°·dt; transform.eulerAngles = (0,0,z)`. Swapping the
-    // setter only leaves the world-space read-back: with a tilted PDA the world euler z of
-    // canvasRot×Rz(localZ) ≠ localZ, so the effective sweep speed — and even direction —
-    // would depend on the PDA orientation (observed: ~184° per 2 s instead of 60°). Swapping
-    // both makes the loop purely local: a constant 30°/s in-plane spin, identical to the mod's
-    // 2D behavior and independent of the canvas orientation.
+    // setter only (v0.3.7) left the world-space read-back: with a tilted PDA the world euler z
+    // of canvasRot×Rz(localZ) ≠ localZ, so the effective sweep speed — and even direction —
+    // depended on the PDA orientation (user observation, log.21: ~184° in 2 s instead of 60°).
+    // Swapping both makes the loop purely local: a constant 30°/s in-plane spin, identical to
+    // the mod's 2D behavior and independent of the canvas orientation.
     static class ScanCircleRotateLocal
     {
         static MethodInfo getEulerAngles;
         static MethodInfo setEulerAngles;
         static MethodInfo getLocalEulerAngles;
         static MethodInfo setLocalEulerAngles;
-        static int redirectedCalls;
-
-        public static int RedirectedCalls => redirectedCalls;
-
-        public static void ResetCount()
-        {
-            redirectedCalls = 0;
-        }
 
         public static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> codes)
         {
@@ -632,7 +620,7 @@ namespace SubnauticaMapBridge
             }
 
             // Operand-based match on BOTH call forms: the mod's IL uses `callvirt` (class
-            // method through a typed reference), so matching `call` alone would miss it.
+            // method through a typed reference), matching `call` only was a v0.3.5 no-op.
             // Opcode names are matched as strings: System.Reflection.Emit.OpCodes is shadowed
             // by a Unity stub type in this project (CS0117, CS0436 suppressed in the csproj).
             foreach (CodeInstruction code in codes)
@@ -641,12 +629,10 @@ namespace SubnauticaMapBridge
                 if (isCall && ReferenceEquals(code.operand, setEulerAngles) && setLocalEulerAngles != null)
                 {
                     code.operand = setLocalEulerAngles;
-                    redirectedCalls++;
                 }
                 else if (isCall && ReferenceEquals(code.operand, getEulerAngles) && getLocalEulerAngles != null)
                 {
                     code.operand = getLocalEulerAngles;
-                    redirectedCalls++;
                 }
                 yield return code;
             }

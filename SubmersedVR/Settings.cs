@@ -132,6 +132,7 @@ namespace SubmersedVR
             panel.AddToggleOption(tab, "Put survival meter on left wrist", PutBarsOnWrist, (value) => { PutBarsOnWrist = value; PutBarsOnWristChanged(value); });
             panel.AddToggleOption(tab, "Articulated Hands", ArticulatedHands, (value) => { ArticulatedHands = value; }, "Hands animate based on the movement of your physical hands.");
             panel.AddToggleOption(tab, "Physical Knife Swing", PhysicalKnifeSwing, (value) => { PhysicalKnifeSwing = value; }, "Swing your right controller to attack with the knife instead of pressing the trigger.");
+            panel.AddSliderOption(tab, "Knife Swing Speed Threshold", KnifeSwingSpeedThreshold, 2.0f, 5.0f, KnifeSwingSpeedThreshold, 0.1f, (value) => { KnifeSwingSpeedThreshold = value; }, SliderLabelMode.Float, "0.0", "Minimum controller speed (m/s) to trigger a knife swing.");
             panel.AddToggleOption(tab, "Enable Game Haptics(WIP)", AreGameHapticsEnabled, (value) => { AreGameHapticsEnabled = value; }, "Enable controller vibration while interacting with world objects.");
             panel.AddToggleOption(tab, "Enable UI Haptics(WIP)", AreUIHapticsEnabled, (value) => { AreUIHapticsEnabled = value; }, "Enable controller vibration while interacting with the User Interface.");
             panel.AddChoiceOption<string>(tab, "Show Laser Pointer", new string[] { "Always", "Default", "Never" }, ShowLaserPointer, (value) =>
@@ -151,7 +152,6 @@ namespace SubmersedVR
 
             panel.AddHeading(tab, "Debug Options");
             panel.AddToggleOption(tab, "Debug Overlays", IsDebugEnabled, (value) => { IsDebugEnabled = value; IsDebugChanged(value); }, "Enables Debug Overlays and Logs.");
-            panel.AddSliderOption(tab, "Knife Swing Speed Threshold", KnifeSwingSpeedThreshold, 2.0f, 5.0f, KnifeSwingSpeedThreshold, 0.1f, (value) => { KnifeSwingSpeedThreshold = value; }, SliderLabelMode.Float, "0.0", "Minimum controller speed (m/s) to trigger a knife swing.");
             panel.AddToggleOption(tab, "Always show controllers", AlwaysShowControllers, (value) => { AlwaysShowControllers = value; AlwaysShowControllersChanged(value); }, "Shows the controllers at all times.");
             //panel.AddToggleOption(tab, "Always show laserpointer", AlwaysShowLaserPointer, (value) => { AlwaysShowLaserPointer = value; AlwaysShowLaserPointerChanged(value); }, "Show the laserpointer at all times.");
 

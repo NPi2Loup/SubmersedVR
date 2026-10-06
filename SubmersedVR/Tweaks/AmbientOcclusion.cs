@@ -22,7 +22,13 @@ namespace SubmersedVR
 
         public static void OnAmbientOcclusionSettingsChanged(Camera camera)
         {
-            AmplifyOcclusionEffect effect = camera?.gameObject.GetComponent<AmplifyOcclusionEffect>();
+            // Unity fake-null: a destroyed camera passes C#'s `?.` (reference
+            // check) and would throw on .gameObject
+            if (camera == null)
+            {
+                return;
+            }
+            AmplifyOcclusionEffect effect = camera.gameObject.GetComponent<AmplifyOcclusionEffect>();
             if (effect != null)
             {
                 effect.enabled = Settings.AOEnabled; //enabled;
@@ -48,11 +54,17 @@ namespace SubmersedVR
 
         public static void AddOcclusionEffect(Camera camera)
         {
+            // Unity fake-null: a destroyed camera would throw on the
+            // .gameObject access below
+            if (camera == null)
+            {
+                return;
+            }
             if (!initialized)
             {
                 Init();
             }
-            AmplifyOcclusionEffect effect = camera?.gameObject.GetComponent<AmplifyOcclusionEffect>();
+            AmplifyOcclusionEffect effect = camera.gameObject.GetComponent<AmplifyOcclusionEffect>();
             if (effect != null)
             {
                 return;

@@ -496,9 +496,16 @@ namespace SubmersedVR
         {
             if (pda == null)
             {
-                pda = Player.main.GetPDA();
+                // null guards: both Player.main (title screen) and
+                // GetPDA() (menus) can be null - log .41: 399 NRE from
+                // pda.isInUse. A null result is re-fetched on every call
+                var pl = Player.main;
+                if (pl != null)
+                {
+                    pda = pl.GetPDA();
+                }
             }
-            return pda.isInUse ? PDA_ScaleFactor : 1.0f;
+            return pda != null && pda.isInUse ? PDA_ScaleFactor : 1.0f;
         }
 
         static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)

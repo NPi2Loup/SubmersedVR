@@ -86,8 +86,11 @@ namespace SubmersedVR
             ReticleSplit.Unsplit();
             var rig = VRCameraRig.instance;
             // The laser pointer may not be set up yet (the VRCameraRig
-            // watchdog retries until it is)
-            var dot = rig.laserPointerUI?.pointerDot?.transform;
+            // watchdog retries until it is). Unity fake-null: a destroyed
+            // LaserPointer / pointerDot passes C#'s `?.` and would throw
+            var pointerUI = rig.laserPointerUI;
+            var dotGo = (UnityEngine.Object)(object)pointerUI == null ? null : pointerUI.pointerDot;
+            var dot = (UnityEngine.Object)(object)dotGo == null ? null : dotGo.transform;
             if (dot == null)
             {
                 return;

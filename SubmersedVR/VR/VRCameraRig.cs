@@ -395,8 +395,13 @@ namespace SubmersedVR
         {
             if (false && Settings.IsDebugEnabled)
             {
-                RaycastResult? uiTarget = fpsInput?.lastRaycastResult;
-                DebugPanel.Show($"World Target: {worldTarget?.name}({worldTargetDistance})\nUI Target:{uiTarget?.gameObject?.name}({uiTarget?.distance})\nFocused: {EventSystem.current.isFocused}");
+                // Unity fake-null: use `==` instead of `?.` (dead code today,
+                // future-proofed if the debug flag is re-enabled)
+                string wtName = (Object)(object)worldTarget == null ? "<none>" : worldTarget.name;
+                RaycastResult? uiTarget = (Object)(object)fpsInput == null ? (RaycastResult?)null : fpsInput.lastRaycastResult;
+                var uiGo = uiTarget?.gameObject;
+                string uiName = (Object)(object)uiGo == null ? "<none>" : uiGo.name;
+                DebugPanel.Show($"World Target: {wtName}({worldTargetDistance})\nUI Target:{uiName}({uiTarget?.distance})\nFocused: {EventSystem.current.isFocused}");
             }
         }
 

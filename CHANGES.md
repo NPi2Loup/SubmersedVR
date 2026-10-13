@@ -8,6 +8,7 @@ This fork (by NPi2Loup) extends the original [SubmersedVR](https://github.com/Ok
 - **Teleport**: new option fixing the precursor teleport's eye strain in VR (see the Teleport section below).
 - **PDA**: the hand-angle sliders now start from the calibrated defaults, so a fresh install opens the PDA well-oriented.
 - **Robustness**: fixed a batch of null-reference crashes (PDA scaling on the title screen / menus, ambient occlusion, laser reticle).
+- **Startup check**: the OpenVR device check no longer disables the mod when OpenVR is not initialized yet at load time — this fixed the "no controllers" startup race (upstream issue #247). The `-vrmode openvr` hint stays as a log warning.
 
 ## VR sonar (new)
 

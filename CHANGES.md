@@ -2,6 +2,14 @@
 
 This fork (by NPi2Loup) extends the original [SubmersedVR](https://github.com/Okabintaro/SubmersedVR) (by Okabintaro) with the features below. Everything is in-game, driven from the **"Submersed VR"** tab of the options menu (the SubnauticaMap bridge is the exception: it is always on when installed). Installation is unchanged: extract the release zip into your Subnautica installation directory.
 
+## 0.2.1-a
+
+Sync with upstream 0.2.1 (the original maintainer is active again). The fork version is now aligned with upstream's numbering, with the `-a` suffix marking the fork — **this release contains everything from 0.3.0 below, plus the sync** (despite the lower-looking number).
+
+- **Vehicle camera**: re-enabled the Seamoth / PRAW camera pivot offset (10 cm in front) — it had been silently disabled since the 2025 game-version port, which also left the "Pilot Position / Height Offset" sliders non-functional (upstream fix, 0.2.1).
+- **Startup check**: kept the fork's non-blocking OpenVR startup warning (upstream 0.2.1 removed the check entirely; the fork keeps the `-vrmode openvr` hint as a log warning).
+- **Docs**: the `-vrmode openvr` launch option is now documented for all users, not only Oculus (upstream).
+
 ## 0.3.0
 
 - **VR sonar**: added the **hologram map (3D)** mode — the game's own sonar hologram (the Seaglide / map room look) rendered on the real terrain, revealed by the ping front and fading out, synced with the on-screen blue wave. Added the **Ping Range (m)** and **Sonar Color** (preset) options.

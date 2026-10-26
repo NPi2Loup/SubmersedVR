@@ -4,8 +4,8 @@
     <TargetFramework>net472</TargetFramework>
     <AssemblyName>SubmersedVR</AssemblyName>
     <Description>A VR Conversion Mod for Subnautica</Description>
-    <!-- Version du mod : le zip s'appelle SubmersedVR_<version>.zip (la numérotation de dev -vNN est terminée, elle reste dans les docs .md du repo) -->
-    <Version>0.3.0</Version>
+    <!-- Version du mod : le zip s'appelle SubmersedVR_<version>.zip (la numérotation de dev -vNN est terminée, elle reste dans les docs .md du repo). Aligne la version sur l'upstream, suffixe -a = fork. -->
+    <Version>0.2.1-a</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <!-- NOTE: Preprocessor directive SV = SubmersedVR, BZ = Below Zero -->
